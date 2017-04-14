@@ -10,6 +10,8 @@
 
 // write_volatile causes an LLVM assert with composite types
 
+// ignore-emscripten
+
 #![feature(volatile)]
 use std::ptr::{read_volatile, write_volatile};
 
