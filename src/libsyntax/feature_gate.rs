@@ -346,6 +346,12 @@ declare_features! (
 
     // Hack to document `-Z linker-flavor` in The Unstable Book
     (active, linker_flavor, "1.18.0", Some(41142)),
+
+    // Allows module-level inline assembly by way of global_asm!()
+    (active, global_asm, "1.18.0", Some(35119)),
+
+    // Allows overlapping impls of marker traits
+    (active, overlapping_marker_traits, "1.18.0", Some(29864)),
 );
 
 declare_features! (
@@ -981,6 +987,9 @@ pub const EXPLAIN_STMT_ATTR_SYNTAX: &'static str =
 
 pub const EXPLAIN_ASM: &'static str =
     "inline assembly is not stable enough for use and is subject to change";
+
+pub const EXPLAIN_GLOBAL_ASM: &'static str =
+    "`global_asm!` is not stable enough for use and is subject to change";
 
 pub const EXPLAIN_LOG_SYNTAX: &'static str =
     "`log_syntax!` is not stable enough for use and is subject to change";
