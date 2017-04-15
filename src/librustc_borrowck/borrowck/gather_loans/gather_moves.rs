@@ -108,6 +108,12 @@ pub fn gather_move_from_pat<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
         cmt: cmt,
         span_path_opt: pat_span_path_opt,
     };
+
+    let source = bccx.tcx.hir.get_pattern_source(move_pat);
+    debug!("gather_move_from_pat: move_pat={:?} source={:?}",
+           move_pat,
+           source);
+
     gather_move(bccx, move_data, move_error_collector, move_info);
 }
 
