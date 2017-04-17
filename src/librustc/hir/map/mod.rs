@@ -656,7 +656,7 @@ impl<'hir> Map<'hir> {
 
         match self.get(result) {
             NodeExpr(ref e) => {
-                // the enclosing expression must be a `match`
+                // the enclosing expression must be a `match` or something else
                 assert!(match e.node {
                             ExprMatch(..) => true,
                             _ => return PatternSource::Other,
@@ -664,7 +664,7 @@ impl<'hir> Map<'hir> {
                 PatternSource::MatchExpr(e)
             }
             NodeStmt(ref s) => {
-                // the enclosing statement must be a `let`
+                // the enclosing statement must be a `let` or something else
                 match s.node {
                     StmtDecl(ref decl, _) => {
                         match decl.node {
