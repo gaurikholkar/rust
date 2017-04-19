@@ -29,7 +29,7 @@ struct GatherMoveInfo<'tcx> {
     id: ast::NodeId,
     kind: MoveKind,
     cmt: mc::cmt<'tcx>,
-    span_path_opt: Option<MoveSpanAndPath>
+    span_path_opt: Option<MoveSpanAndPath<'tcx>>
 }
 
 pub fn gather_decl<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
@@ -95,10 +95,11 @@ pub fn gather_move_from_pat<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
                                       move_error_collector: &mut MoveErrorCollector<'tcx>,
                                       move_pat: &hir::Pat,
                                       cmt: mc::cmt<'tcx>) {
+    let source = bccx.tcx.hir.get_pattern_source(move_pat);
     let pat_span_path_opt = match move_pat.node {
         PatKind::Binding(_, _, ref path1, _) => {
             Some(MoveSpanAndPath{span: move_pat.span,
-                                 name: path1.node})
+                                 name: path1.node, pat_source: source,})
         },
         _ => None,
     };
@@ -109,7 +110,6 @@ pub fn gather_move_from_pat<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
         span_path_opt: pat_span_path_opt,
     };
 
-    let source = bccx.tcx.hir.get_pattern_source(move_pat);
     debug!("gather_move_from_pat: move_pat={:?} source={:?}",
            move_pat,
            source);

@@ -96,7 +96,7 @@ enum MapEntry<'hir> {
 }
 
 /// Represents the kind of pattern
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum PatternSource<'hir> {
     MatchExpr(&'hir Expr),
     LetDecl(&'hir Local),
