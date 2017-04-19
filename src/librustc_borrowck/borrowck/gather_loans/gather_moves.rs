@@ -23,7 +23,9 @@ use rustc::ty::{self, Ty};
 use std::rc::Rc;
 use syntax::ast;
 use syntax_pos::Span;
-use rustc::hir::{self, PatKind};
+use rustc::hir::*;
+use rustc::hir::map::Node::*;
+use rustc::hir::map::{PatternSource};
 
 struct GatherMoveInfo<'tcx> {
     id: ast::NodeId,
@@ -31,6 +33,36 @@ struct GatherMoveInfo<'tcx> {
     cmt: mc::cmt<'tcx>,
     span_path_opt: Option<MoveSpanAndPath<'tcx>>
 }
+
+/// Returns the kind of the Pattern
+fn get_pattern_source<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, pat: &Pat) -> PatternSource<'tcx> {
+	
+         match tcx.hir.get(tcx.hir.get_parent(pat.id)) {
+            NodeExpr(ref e) => {
+                // the enclosing expression must be a `match` or something else
+                assert!(match e.node {
+                            ExprMatch(..) => true,
+                            _ => return PatternSource::Other,
+                        });
+                PatternSource::MatchExpr(e)
+            }
+            NodeStmt(ref s) => {
+                // the enclosing statement must be a `let` or something else
+                match s.node {
+                    StmtDecl(ref decl, _) => {
+                        match decl.node {
+                            DeclLocal(ref local) => PatternSource::LetDecl(local),
+                            _ => return PatternSource::Other,
+                        }
+                    }
+                    _ => return PatternSource::Other,
+                }
+            }
+
+            _ => return PatternSource::Other,
+
+        }
+    }
 
 pub fn gather_decl<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
                              move_data: &MoveData<'tcx>,
@@ -95,7 +127,7 @@ pub fn gather_move_from_pat<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
                                       move_error_collector: &mut MoveErrorCollector<'tcx>,
                                       move_pat: &hir::Pat,
                                       cmt: mc::cmt<'tcx>) {
-    let source = bccx.tcx.hir.get_pattern_source(move_pat);
+    let source = get_pattern_source(bccx.tcx,move_pat);
     let pat_span_path_opt = match move_pat.node {
         PatKind::Binding(_, _, ref path1, _) => {
             Some(MoveSpanAndPath{span: move_pat.span,

@@ -645,41 +645,6 @@ impl<'hir> Map<'hir> {
             Err(id) => id,
         }
     }
-
-   /// Returns the kind of the Pattern
-    pub fn get_pattern_source(&self, pat: &Pat) -> PatternSource<'hir> {
-        let result = self.walk_parent_nodes(pat.id, |node| match *node {
-                NodePat(_) => false, // keep walking as long as we are in a pattern
-                _ => true, // stop walking once we exit patterns
-            })
-            .expect("never found a parent for the pattern");
-
-        match self.get(result) {
-            NodeExpr(ref e) => {
-                // the enclosing expression must be a `match` or something else
-                assert!(match e.node {
-                            ExprMatch(..) => true,
-                            _ => return PatternSource::Other,
-                        });
-                PatternSource::MatchExpr(e)
-            }
-            NodeStmt(ref s) => {
-                // the enclosing statement must be a `let` or something else
-                match s.node {
-                    StmtDecl(ref decl, _) => {
-                        match decl.node {
-                            DeclLocal(ref local) => PatternSource::LetDecl(local),
-                            _ => return PatternSource::Other,
-                        }
-                    }
-                    _ => return PatternSource::Other,
-                }
-            }
-
-            _ => return PatternSource::Other,
-
-        }
-    }
     
     /// Returns the nearest enclosing scope. A scope is an item or block.
     /// FIXME it is not clear to me that all items qualify as scopes - statics
