@@ -648,18 +648,16 @@ impl<'hir> Map<'hir> {
 
    /// Returns the kind of the Pattern
     pub fn get_pattern_source(&self, pat: &Pat) -> PatternSource<'hir> {
-        let result = self.walk_parent_nodes(pat.id, |node| match *node {
-                NodePat(_) => false, // keep walking as long as we are in a pattern
-                _ => true, // stop walking once we exit patterns
-            })
-            .expect("never found a parent for the pattern");
+       
+	let parent = self.get_parent(pat.id);
+	debug!("get_pattern_source::parent node id is {:?} and parent node is {:?}",parent,self.get(parent));
 
-        match self.get(result) {
+        match self.get(parent) {
             NodeExpr(ref e) => {
                 // the enclosing expression must be a `match` or something else
                 assert!(match e.node {
                             ExprMatch(..) => true,
-                            _ => return PatternSource::Other,
+                            _ => {debug!("get_pattern_source::not a match {:?}",e.node);return PatternSource::Other},
                         });
                 PatternSource::MatchExpr(e)
             }
@@ -669,14 +667,14 @@ impl<'hir> Map<'hir> {
                     StmtDecl(ref decl, _) => {
                         match decl.node {
                             DeclLocal(ref local) => PatternSource::LetDecl(local),
-                            _ => return PatternSource::Other,
+                            _ => {debug!("get_pattern_source::source not let statement{:?}",decl.node);return PatternSource::Other},
                         }
                     }
-                    _ => return PatternSource::Other,
+                    _ => {debug!("get_pattern_source::not a statement");return PatternSource::Other},
                 }
             }
 
-            _ => return PatternSource::Other,
+            _ => {debug!("get_pattern_source::does not match any of the cases");return PatternSource::Other},
 
         }
     }
