@@ -36,8 +36,10 @@ struct GatherMoveInfo<'tcx> {
 
 /// Returns the kind of the Pattern
 fn get_pattern_source<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, pat: &Pat) -> PatternSource<'tcx> {
-	
-         match tcx.hir.get(tcx.hir.get_parent(pat.id)) {
+
+let parent = tcx.hir.get_parent_node(pat.id);
+
+         match tcx.hir.get(parent) {
             NodeExpr(ref e) => {
                 // the enclosing expression must be a `match` or something else
                 assert!(match e.node {
@@ -131,7 +133,8 @@ pub fn gather_move_from_pat<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
     let pat_span_path_opt = match move_pat.node {
         PatKind::Binding(_, _, ref path1, _) => {
             Some(MoveSpanAndPath{span: move_pat.span,
-                                 name: path1.node, pat_source: source,})
+                                 name: path1.node, 
+				 pat_source: source,})
         },
         _ => None,
     };

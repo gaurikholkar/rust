@@ -71,7 +71,10 @@ fn report_move_errors<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>, errors: &Vec<Move
     for error in &grouped_errors {
         let mut err = report_cannot_move_out_of(bccx, error.move_from.clone());
         let mut is_first_note = true;
-        match error.move_to_places[0].pat_source {
+	
+	if let Some(pattern_source) = error.move_to_places.get(0){
+ 
+        match pattern_source.pat_source {
             PatternSource::LetDecl(_) => {}
             _ => {
                 for move_to in &error.move_to_places {
@@ -81,10 +84,11 @@ fn report_move_errors<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>, errors: &Vec<Move
                 }
             }
         }
-        err.emit();
-
     }
-}
+        err.emit();
+	
+	}
+    }
 
 fn group_errors_with_same_origin<'tcx>(errors: &Vec<MoveError<'tcx>>)
                                        -> Vec<GroupedMoveErrors<'tcx>> {
@@ -193,5 +197,3 @@ fn note_move_destination(mut err: DiagnosticBuilder,
         err
     }
 }
-
-
