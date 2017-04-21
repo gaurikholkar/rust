@@ -41,30 +41,30 @@ fn get_pattern_source<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, pat: &Pat) -> Patte
 
     match tcx.hir.get(parent) {
         NodeExpr(ref e) => {
-                // the enclosing expression must be a `match` or something else
-                assert!(match e.node {
-                            ExprMatch(..) => true,
-                            _ => return PatternSource::Other,
-                        });
-                PatternSource::MatchExpr(e)
-            }
-            NodeStmt(ref s) => {
-                // the enclosing statement must be a `let` or something else
-                match s.node {
-                    StmtDecl(ref decl, _) => {
-                        match decl.node {
-                            DeclLocal(ref local) => PatternSource::LetDecl(local),
-                            _ => return PatternSource::Other,
-                        }
-                    }
-                    _ => return PatternSource::Other,
-                }
-            }
-
-            _ => return PatternSource::Other,
-
+            // the enclosing expression must be a `match` or something else
+            assert!(match e.node {
+                        ExprMatch(..) => true,
+                        _ => return PatternSource::Other,
+                    });
+            PatternSource::MatchExpr(e)
         }
+        NodeStmt(ref s) => {
+            // the enclosing statement must be a `let` or something else
+            match s.node {
+                StmtDecl(ref decl, _) => {
+                    match decl.node {
+                        DeclLocal(ref local) => PatternSource::LetDecl(local),
+                        _ => return PatternSource::Other,
+                    }
+                }
+                _ => return PatternSource::Other,
+            }
+        }
+
+        _ => return PatternSource::Other,
+
     }
+}
 
 pub fn gather_decl<'a, 'tcx>(bccx: &BorrowckCtxt<'a, 'tcx>,
                              move_data: &MoveData<'tcx>,
