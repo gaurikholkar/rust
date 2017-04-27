@@ -95,14 +95,6 @@ enum MapEntry<'hir> {
     RootCrate,
 }
 
-/// Represents the kind of pattern
-#[derive(Debug, Clone, Copy)]
-pub enum PatternSource<'hir> {
-    MatchExpr(&'hir Expr),
-    LetDecl(&'hir Local),
-    Other,
-}
-
 impl<'hir> Clone for MapEntry<'hir> {
     fn clone(&self) -> MapEntry<'hir> {
         *self

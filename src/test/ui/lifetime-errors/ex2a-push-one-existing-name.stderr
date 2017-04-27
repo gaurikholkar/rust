@@ -10,18 +10,18 @@ note: the anonymous lifetime #2 defined on the body at 15:51...
   --> $DIR/ex2a-push-one-existing-name.rs:15:52
    |
 15 |   fn foo<'a>(x: &mut Vec<Ref<'a, i32>>, y: Ref<i32>) {
-   |  ____________________________________________________^
+   |  ____________________________________________________^ starting here...
 16 | |     x.push(y);
 17 | | }
-   | |_^
+   | |_^ ...ending here
 note: ...does not necessarily outlive the lifetime 'a as defined on the body at 15:51
   --> $DIR/ex2a-push-one-existing-name.rs:15:52
    |
 15 |   fn foo<'a>(x: &mut Vec<Ref<'a, i32>>, y: Ref<i32>) {
-   |  ____________________________________________________^
+   |  ____________________________________________________^ starting here...
 16 | |     x.push(y);
 17 | | }
-   | |_^
+   | |_^ ...ending here
 
 error: aborting due to previous error
 
