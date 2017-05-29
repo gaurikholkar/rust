@@ -67,7 +67,7 @@ use hir::def_id::DefId;
 use middle::region;
 use traits::{ObligationCause, ObligationCauseCode};
 use ty::{self, TyCtxt, TypeFoldable};
-use ty::{Region, Issue32330};
+use ty::{Region, Issue32330 };
 use ty::error::TypeError;
 use syntax::ast::DUMMY_NODE_ID;
 use syntax_pos::{Pos, Span};
@@ -254,6 +254,35 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
 }
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
+    pub fn report_anonymous_lifetime(&self,region: Region<'tcx>) -> Option<&hir::Arg>{
+                
+                match *region {
+		     ty::ReFree(ref free_region)=>{
+                                
+		         let id = free_region.scope;
+                         let def_id = self.tcx.hir.as_local_node_id(id).unwrap();
+                       	 let body_id =  self.tcx.hir.maybe_body_owned_by(def_id).unwrap();
+        
+	                 let body = self.tcx.hir.body(body_id);
+                         for arg in &body.arguments{
+  		              let ty = self.tables.borrow().node_id_to_type(arg.id);  
+                              match ty.walk().flat_map(|t| t.regions()).next().unwrap(){
+                                 &ty::ReFree(ref region) => {
+                                     match region.bound_region{
+                                        ty::BrAnon(_) => { return Some(arg) },
+                                        _ => { return None },
+                                     }
+                                 }, 
+                                 _ => { return None },
+                             }
+                          }
+                      },
+	              _ => { return None},
+		      }
+
+            None 
+}
+
     pub fn report_region_errors(&self,
                                 errors: &Vec<RegionResolutionError<'tcx>>) {
         debug!("report_region_errors(): {} errors to start", errors.len());
@@ -263,10 +292,14 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         let errors = self.process_errors(errors);
 
         debug!("report_region_errors: {} errors after preprocessing", errors.len());
+        
+//        let id;
 
         for error in errors {
+
             debug!("report_region_errors: error = {:?}", error);
             match error.clone() {
+
                 ConcreteFailure(origin, sub, sup) => {
                     self.report_concrete_failure(origin, sub, sup).emit();
                 }

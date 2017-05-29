@@ -324,6 +324,7 @@ impl Iterator for Ancestors {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct NodeItem<T> {
     pub node: Node,
     pub item: T,

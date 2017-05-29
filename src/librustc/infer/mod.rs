@@ -42,7 +42,6 @@ use errors::DiagnosticBuilder;
 use syntax_pos::{self, Span, DUMMY_SP};
 use util::nodemap::{FxHashMap, FxHashSet};
 use arena::DroplessArena;
-
 use self::combine::CombineFields;
 use self::higher_ranked::HrMatchResult;
 use self::region_inference::{RegionVarBindings, RegionSnapshot};
@@ -1329,6 +1328,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                                region_map,
                                                free_regions);
         let errors = self.region_vars.resolve_regions(&region_rels);
+        
         if !self.is_tainted_by_errors() {
             // As a heuristic, just skip reporting region errors
             // altogether if other errors have been reported while
