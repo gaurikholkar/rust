@@ -20,6 +20,9 @@ pub use self::region_inference::{GenericKind, VerifyBound};
 
 use hir::def_id::DefId;
 use hir;
+use hir::map::Node::NodeItem;
+//use hir::{FnDecl,Pat};
+//use hir::intravisit::{Visitor,NestedVisitorMap};
 use middle::free_region::{FreeRegionMap, RegionRelations};
 use middle::region::RegionMaps;
 use middle::mem_categorization as mc;
@@ -38,16 +41,17 @@ use std::cell::{Cell, RefCell, Ref, RefMut};
 use std::fmt;
 use std::ops::Deref;
 use syntax::ast;
+//use syntax::ast::NodeId;
 use errors::DiagnosticBuilder;
 use syntax_pos::{self, Span, DUMMY_SP};
 use util::nodemap::{FxHashMap, FxHashSet};
 use arena::DroplessArena;
-
 use self::combine::CombineFields;
 use self::higher_ranked::HrMatchResult;
 use self::region_inference::{RegionVarBindings, RegionSnapshot};
 use self::type_variable::TypeVariableOrigin;
 use self::unify_key::ToType;
+use hir::ItemFn;
 
 mod combine;
 mod equate;
@@ -666,6 +670,23 @@ impl<'a, 'tcx> TyCtxt<'a, 'tcx, 'tcx> {
     }
 }
 
+/*
+struct FindAnonLifetimeVisitor<'a, 'gcx: 'a > {
+    hir_map: &'a hir::map::Map<'gcx>,
+  //found_fndecl_pattern: Option<&'gcx Pat>,
+}
+
+impl<'a, 'gcx> FindAnonLifetimeVisitor<'a, 'gcx> {
+}
+
+impl<'a, 'gcx> Visitor<'gcx> for FindAnonLifetimeVisitor<'a, 'gcx> {
+
+fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'gcx> {
+        NestedVisitorMap::None
+  }
+
+}
+*/
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     fn normalize_projections_in<T>(&self, value: &T) -> T::Lifted
         where T: TypeFoldable<'tcx> + ty::Lift<'gcx>
@@ -1329,6 +1350,26 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                                region_map,
                                                free_regions);
         let errors = self.region_vars.resolve_regions(&region_rels);
+        let def_id = self.tcx.hir.as_local_node_id(region_context).unwrap();
+        
+     /* let mut fndecl_visitor = FindAnonLifetimeVisitor {
+              hir_map: &self.tcx.hir,
+              found_fndecl_pattern: None,    
+        }; */
+
+      //let item = tcx.hir.expect_item(id);
+      //debug!("rustc::infer::mod visit_item item={}", tcx.hir.node_to_string(item.id));
+        match self.tcx.hir.find(def_id) {
+            Some(NodeItem(item)) => {
+                //fndecl_visitor.visit_item(item);		
+		match item.node{
+		    ItemFn(ref fndecl,..)=>{},
+		    _ => {},
+		}
+	},
+            _ => (),
+        }
+
         if !self.is_tainted_by_errors() {
             // As a heuristic, just skip reporting region errors
             // altogether if other errors have been reported while
