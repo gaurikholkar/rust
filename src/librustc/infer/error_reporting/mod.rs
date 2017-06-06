@@ -254,9 +254,9 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
 }
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
-    pub fn report_anonymous_lifetime(&self,region: Region<'tcx>) -> Option<&hir::Arg>{
+    pub fn report_anonymous_lifetime(&self,region: &Region<'tcx>) -> Option<&hir::Arg>{
                 
-                match *region {
+                match **region {
 		     ty::ReFree(ref free_region)=>{
                                 
 		         let id = free_region.scope;
@@ -282,6 +282,25 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
 
             None 
 }
+    
+    pub fn report_named_anon_conflict(&self,error :&RegionResolutionError<'tcx>)-> bool
+{
+      match error.clone() {
+
+                ConcreteFailure(_, sub, sup) => {
+                    let mut anon_param = self.report_anonymous_lifetime(&sub);
+                    match anon_param {
+                         Some(_) => {  },
+                         None => { anon_param = self.report_anonymous_lifetime(&sup);},
+                    }
+                    debug!("report_named_anon_conflict: anonymous lifetime corresponds to the argument = {:?}",anon_param.unwrap());			
+// call err.span_note if anon_param == Some(_)
+return true;
+
+},
+                 _ => {return false;},
+                 }
+}
 
     pub fn report_region_errors(&self,
                                 errors: &Vec<RegionResolutionError<'tcx>>) {
@@ -292,29 +311,31 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         let errors = self.process_errors(errors);
 
         debug!("report_region_errors: {} errors after preprocessing", errors.len());
-        
-//        let id;
 
         for error in errors {
 
             debug!("report_region_errors: error = {:?}", error);
-            match error.clone() {
+            if !self.report_named_anon_conflict(&error){
+                 
+               match error.clone() {
 
-                ConcreteFailure(origin, sub, sup) => {
-                    self.report_concrete_failure(origin, sub, sup).emit();
-                }
+                  ConcreteFailure(origin, sub, sup) => {
+                    
+                      self.report_concrete_failure(origin, sub, sup).emit();
+                  }
 
-                GenericBoundFailure(kind, param_ty, sub) => {
-                    self.report_generic_bound_failure(kind, param_ty, sub);
-                }
+                  GenericBoundFailure(kind, param_ty, sub) => {
+                      self.report_generic_bound_failure(kind, param_ty, sub);
+                  }
 
-                SubSupConflict(var_origin,
+                  SubSupConflict(var_origin,
                                sub_origin, sub_r,
                                sup_origin, sup_r) => {
-                    self.report_sub_sup_conflict(var_origin,
+                      self.report_sub_sup_conflict(var_origin,
                                                  sub_origin, sub_r,
                                                  sup_origin, sup_r);
-                }
+                  }
+               }
             }
         }
     }
