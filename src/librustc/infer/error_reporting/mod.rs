@@ -254,7 +254,7 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
 }
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
-    pub fn report_anonymous_lifetime(&self,region: &Region<'tcx>) -> Option<&hir::Arg>{
+    pub fn find_variable_with_anonymous_region(&self,region: &Region<'tcx>) -> Option<&hir::Arg>{
                 
                 match **region {
 		     ty::ReFree(ref free_region)=>{
@@ -282,25 +282,62 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
 
             None 
 }
+    pub fn is_named_region(&self,region: &Region<'tcx>) -> bool {
+
+
+    match **region {
+		     ty::ReFree(ref free_region)=>{
+                            match free_region.bound_region{
+			        ty::BrNamed(..) => { return true;},
+				_ => {return false;},
+			    }
+			},
+
+		     _=> {return false;},
+	
+		   }
+               
+    }
     
-    pub fn report_named_anon_conflict(&self,error :&RegionResolutionError<'tcx>)-> bool
+    pub fn is_anonymous_region(&self,region: &Region<'tcx>) -> bool{
+
+
+    match **region {
+		     ty::ReFree(ref free_region)=>{
+                            match free_region.bound_region{
+			        ty::BrAnon(..) => { return true;},
+				_ => {return false;},
+			    }
+			},
+		      _=> {return false;},
+        }
+   }
+ 
+   pub fn report_named_anon_conflict(&self,error :&RegionResolutionError<'tcx>)-> bool
 {
       match error.clone() {
 
-                ConcreteFailure(_, sub, sup) => {
-                    let mut anon_param = self.report_anonymous_lifetime(&sub);
-                    match anon_param {
-                         Some(_) => {  },
-                         None => { anon_param = self.report_anonymous_lifetime(&sup);},
-                    }
-                    debug!("report_named_anon_conflict: anonymous lifetime corresponds to the argument = {:?}",anon_param.unwrap());			
-// call err.span_note if anon_param == Some(_)
-return true;
+                ConcreteFailure(_, sub, sup) | SubSupConflict(_,
+                               _, sub,
+                               _, sup)=> {
+                   let (named, anonymous, var) = if self.is_named_region(&sub) && self.is_anonymous_region(&sup) {
+        (sub, sup, self.find_variable_with_anonymous_region(&sup).unwrap())}
+    else if self.is_named_region(&sup) && self.is_anonymous_region(&sub) {
+        (sup, sub, self.find_variable_with_anonymous_region(&sub).unwrap())
+    } else {
+        return false; // inapplicable
+    };
 
-},
-                 _ => {return false;},
-                 }
-}
+  self.tcx.sess.span_err(anonymous,&format!("this reference must have lifetime {}",named)).span_label("consider changing type of `{}` to refer to `{}`", var, named);
+    return true;
+
+  },
+                _ => {return false;},
+                 
+		}
+
+
+  }
 
     pub fn report_region_errors(&self,
                                 errors: &Vec<RegionResolutionError<'tcx>>) {
