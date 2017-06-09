@@ -254,7 +254,7 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
 }
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
-    pub fn find_variable_with_anonymous_region(&self,region: &Region<'tcx>) -> Option<&hir::Arg>{
+    pub fn find_arg_with_anonymous_region(&self,region: &Region<'tcx>) -> Option<&hir::Arg>{
                 
                 match **region {
 		     ty::ReFree(ref free_region)=>{
@@ -288,12 +288,12 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     match **region {
 		     ty::ReFree(ref free_region)=>{
                             match free_region.bound_region{
-			        ty::BrNamed(..) => { return true;},
-				_ => {return false;},
+			        ty::BrNamed(..) => {true},
+				_ => {false},
 			    }
 			},
 
-		     _=> {return false;},
+		     _=> {false},
 	
 		   }
                
@@ -305,37 +305,37 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     match **region {
 		     ty::ReFree(ref free_region)=>{
                             match free_region.bound_region{
-			        ty::BrAnon(..) => { return true;},
-				_ => {return false;},
+			        ty::BrAnon(..) => { true},
+				_ => {false},
 			    }
 			},
-		      _=> {return false;},
+		      _=> {false},
         }
    }
  
    pub fn report_named_anon_conflict(&self,error :&RegionResolutionError<'tcx>)-> bool
 {
-      match error.clone() {
 
-                ConcreteFailure(_, sub, sup) | SubSupConflict(_,
-                               _, sub,
-                               _, sup)=> {
-                   let (named, anonymous, var) = if self.is_named_region(&sub) && self.is_anonymous_region(&sup) {
-        (sub, sup, self.find_variable_with_anonymous_region(&sup).unwrap())}
-    else if self.is_named_region(&sup) && self.is_anonymous_region(&sub) {
-        (sup, sub, self.find_variable_with_anonymous_region(&sub).unwrap())
-    } else {
-        return false; // inapplicable
-    };
+      let (span, sub, sup) = match error.clone() {
+         ConcreteFailure(origin, sub, sup) => (origin.span(), sub, sup),
+         _ => return false, // inapplicable
+};
 
-  self.tcx.sess.span_err(anonymous,&format!("this reference must have lifetime {}",named)).span_label("consider changing type of `{}` to refer to `{}`", var, named);
+      let (named, var) = if self.is_named_region(&sub) && self.is_anonymous_region(&sup) {
+        (sub, self.find_arg_with_anonymous_region(&sup).unwrap())}
+         else if self.is_named_region(&sup) && self.is_anonymous_region(&sub) {
+        (sup, self.find_arg_with_anonymous_region(&sub).unwrap())
+       } else {
+          return false; // inapplicable
+      };
+
+  if let Some(simple_name) = var.pat.simple_name() {
+                struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of {}",simple_name).span_label(var.pat.span,format!("consider changing type of `{}` to refer to `{}`", simple_name, named)).span_label(span,format!("lifetime `{}` required", named)).emit();
+                
+            } else {
+               struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of pattern").span_label(var.pat.span,format!("consider changing type of pattern to refer to `{}`", named)).span_label(span,format!("lifetime `{}` required", named)).emit();
+            }
     return true;
-
-  },
-                _ => {return false;},
-                 
-		}
-
 
   }
 
