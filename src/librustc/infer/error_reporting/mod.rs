@@ -254,9 +254,10 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
 }
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
-    pub fn find_arg_with_anonymous_region(&self,region: &Region<'tcx>) -> Option<&hir::Arg>{
+
+    pub fn find_arg_with_anonymous_region(&self,anon_region: Region<'tcx>,named_region: Region<'tcx>) -> Option<(&hir::Arg,ty::Ty<'tcx>)>{
                 
-                match **region {
+                match *anon_region {
 		     ty::ReFree(ref free_region)=>{
                                 
 		         let id = free_region.scope;
@@ -265,51 +266,56 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         
 	                 let body = self.tcx.hir.body(body_id);
                          for arg in &body.arguments{
-  		              let ty = self.tables.borrow().node_id_to_type(arg.id);  
-                              match ty.walk().flat_map(|t| t.regions()).next().unwrap(){
-                                 &ty::ReFree(ref region) => {
-                                     match region.bound_region{
-                                        ty::BrAnon(_) => { return Some(arg) },
-                                        _ => { return None },
-                                     }
-                                 }, 
-                                 _ => { return None },
-                             }
-                          }
-                      },
-	              _ => { return None},
-		      }
+  		              let ty = self.tables.borrow().node_id_to_type(arg.id);  	
+                              let mut found_anon_region = false;
+                              let new_arg_ty = self.tcx.fold_regions(&ty, &mut false, |r, _| {
+                              if *r == *anon_region { 
+                                 found_anon_region = true;
+                                 named_region
+                              } else {
+                                 r
+                              }
+                              });
+                              if found_anon_region {
+				return Some((arg,new_arg_ty));}
+			      else{
+				return None;	}
+                              }
+                            },
+	               _ => { return None},
+		       }
 
             None 
-}
-    pub fn is_named_region(&self,region: &Region<'tcx>) -> bool {
+    }
+
+    pub fn is_named_region(&self,region: Region<'tcx>) -> bool {
 
 
-    match **region {
+    match *region {
 		     ty::ReFree(ref free_region)=>{
                             match free_region.bound_region{
-			        ty::BrNamed(..) => {true},
-				_ => {false},
+			        ty::BrNamed(..) => true,
+				_ => false,
 			    }
 			},
 
-		     _=> {false},
+		     _=> false,
 	
 		   }
                
     }
     
-    pub fn is_anonymous_region(&self,region: &Region<'tcx>) -> bool{
+    pub fn is_anonymous_region(&self,region: Region<'tcx>) -> bool{
 
 
-    match **region {
+    match *region {
 		     ty::ReFree(ref free_region)=>{
                             match free_region.bound_region{
-			        ty::BrAnon(..) => { true},
-				_ => {false},
+			        ty::BrAnon(..) => true,
+				_ => false,
 			    }
 			},
-		      _=> {false},
+		      _=> false,
         }
    }
  
@@ -321,19 +327,20 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
          _ => return false, // inapplicable
 };
 
-      let (named, var) = if self.is_named_region(&sub) && self.is_anonymous_region(&sup) {
-        (sub, self.find_arg_with_anonymous_region(&sup).unwrap())}
-         else if self.is_named_region(&sup) && self.is_anonymous_region(&sub) {
-        (sup, self.find_arg_with_anonymous_region(&sub).unwrap())
+      let (named, (var,new_ty)) = if self.is_named_region(&sub) && self.is_anonymous_region(sup) {
+        (sub, self.find_arg_with_anonymous_region(sup,sub).unwrap())}
+         else if self.is_named_region(sup) && self.is_anonymous_region(sub) {
+        (sup, self.find_arg_with_anonymous_region(sub,sup).unwrap())
        } else {
           return false; // inapplicable
       };
 
   if let Some(simple_name) = var.pat.simple_name() {
-                struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of {}",simple_name).span_label(var.pat.span,format!("consider changing type of `{}` to refer to `{}`", simple_name, named)).span_label(span,format!("lifetime `{}` required", named)).emit();
+                struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of {}",simple_name).span_label(var.pat.span,format!
+("consider changing the type of `{}` to `{}`", simple_name, new_ty)).span_label(span,format!("lifetime `{}` required", named)).emit();
                 
             } else {
-               struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of pattern").span_label(var.pat.span,format!("consider changing type of pattern to refer to `{}`", named)).span_label(span,format!("lifetime `{}` required", named)).emit();
+               struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of pattern").span_label(var.pat.span,format!("consider changing type of pattern to `{}`", new_ty)).span_label(span,format!("lifetime `{}` required", named)).emit();
             }
     return true;
 
