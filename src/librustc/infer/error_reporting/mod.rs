@@ -254,111 +254,149 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
 }
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
+    // This method walks the Type of the function body arguments using
+    // `fold_regions()` function and returns the
+    // &hir::Arg of the function argument corresponding to the anonymous
+    // region and the Ty corresponding to the named region.
+    // Currently only the case where the function declaration consists of
+    // one named region and one anonymous region is handled.
+    // Consider the example `fn foo<'a>(x: &'a i32, y: &i32) -> &'a i32`
+    // Here, the `y` and the `Ty` of `y` is returned after being substituted
+    // by that of the named region.
+    pub fn find_arg_with_anonymous_region(&self,
+                                          anon_region: Region<'tcx>,
+                                          named_region: Region<'tcx>)
+                                          -> Option<(&hir::Arg, ty::Ty<'tcx>)> {
 
-    pub fn find_arg_with_anonymous_region(&self,anon_region: Region<'tcx>,named_region: Region<'tcx>) -> Option<(&hir::Arg,ty::Ty<'tcx>)>{
-                
-                match *anon_region {
-		     ty::ReFree(ref free_region)=>{
-                                
-		         let id = free_region.scope;
-                         let def_id = self.tcx.hir.as_local_node_id(id).unwrap();
-                       	 let body_id =  self.tcx.hir.maybe_body_owned_by(def_id).unwrap();
-        
-	                 let body = self.tcx.hir.body(body_id);
-                         for arg in &body.arguments{
-  		              let ty = self.tables.borrow().node_id_to_type(arg.id);  	
-                              let mut found_anon_region = false;
-                              let new_arg_ty = self.tcx.fold_regions(&ty, &mut false, |r, _| {
-                              if *r == *anon_region { 
-                                 found_anon_region = true;
-                                 named_region
-                              } else {
-                                 r
-                              }
-                              });
-                              if found_anon_region {
-				return Some((arg,new_arg_ty));}
-			      else{
-				return None;	}
-                              }
-                            },
-	               _ => { return None},
-		       }
+        match *anon_region {
+            ty::ReFree(ref free_region) => {
 
-            None 
-    }
+                let id = free_region.scope;
+                let def_id = self.tcx
+                    .hir
+                    .as_local_node_id(id)
+                    .unwrap();
+                let body_id = self.tcx
+                    .hir
+                    .maybe_body_owned_by(def_id)
+                    .unwrap();
 
-    pub fn is_named_region(&self,region: Region<'tcx>) -> bool {
+                let body = self.tcx.hir.body(body_id);
+                body.arguments
+                    .iter()
+                    .filter_map(|arg| {
 
-
-    match *region {
-		     ty::ReFree(ref free_region)=>{
-                            match free_region.bound_region{
-			        ty::BrNamed(..) => true,
-				_ => false,
-			    }
-			},
-
-		     _=> false,
-	
-		   }
-               
-    }
-    
-    pub fn is_anonymous_region(&self,region: Region<'tcx>) -> bool{
-
-
-    match *region {
-		     ty::ReFree(ref free_region)=>{
-                            match free_region.bound_region{
-			        ty::BrAnon(..) => true,
-				_ => false,
-			    }
-			},
-		      _=> false,
-        }
-   }
- 
-   pub fn report_named_anon_conflict(&self,error :&RegionResolutionError<'tcx>)-> bool
-{
-
-      let (span, sub, sup) = match error.clone() {
-         ConcreteFailure(origin, sub, sup) => (origin.span(), sub, sup),
-         _ => return false, // inapplicable
-};
-
-      let (named, (var,new_ty)) = if self.is_named_region(&sub) && self.is_anonymous_region(sup) {
-        (sub, self.find_arg_with_anonymous_region(sup,sub).unwrap())}
-         else if self.is_named_region(sup) && self.is_anonymous_region(sub) {
-        (sup, self.find_arg_with_anonymous_region(sub,sup).unwrap())
-       } else {
-          return false; // inapplicable
-      };
-
-  if let Some(simple_name) = var.pat.simple_name() {
-                struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of {}",simple_name).span_label(var.pat.span,format!
-("consider changing the type of `{}` to `{}`", simple_name, new_ty)).span_label(span,format!("lifetime `{}` required", named)).emit();
-                
-            } else {
-               struct_span_err!(self.tcx.sess,var.pat.span,E0312,"explicit lifetime required in the type of pattern").span_label(var.pat.span,format!("consider changing type of pattern to `{}`", new_ty)).span_label(span,format!("lifetime `{}` required", named)).emit();
+                        let ty = self.tables.borrow().node_id_to_type(arg.id);
+                        let mut found_anon_region = false;
+                        let new_arg_ty =
+                            self.tcx.fold_regions(&ty, &mut false, |r, _| if *r == *anon_region {
+                                found_anon_region = true;
+                                named_region
+                            } else {
+                                r
+                            });
+                        if found_anon_region {
+                            return Some((arg, new_arg_ty));
+                        } else {
+                            None
+                        }
+                    })
+                    .next()
             }
-    return true;
+            _ => None,
+        }
 
-  }
+    }
 
-    pub fn report_region_errors(&self,
-                                errors: &Vec<RegionResolutionError<'tcx>>) {
+    // This method returns whether the given Region is Named
+    pub fn is_named_region(&self, region: Region<'tcx>) -> bool {
+
+        match *region {
+            ty::ReFree(ref free_region) => {
+                match free_region.bound_region {
+                    ty::BrNamed(..) => true,
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+
+    // This method returns whether the given Region is Anonymous
+    pub fn is_anonymous_region(&self, region: Region<'tcx>) -> bool {
+
+        match *region {
+            ty::ReFree(ref free_region) => {
+                match free_region.bound_region {
+                    ty::BrAnon(..) => true,
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+
+
+    // This method generates the error message for the case when
+    // the function arguments consist of a named region and an anonymous
+    // region and corresponds to `ConcreteFailure(..)`
+    pub fn report_named_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
+
+        let (span, sub, sup) = match error.clone() {
+            ConcreteFailure(origin, sub, sup) => (origin.span(), sub, sup),
+            _ => return false, // inapplicable
+        };
+
+        let (named, (var, new_ty)) =
+            if self.is_named_region(&sub) && self.is_anonymous_region(sup) {
+                (sub, self.find_arg_with_anonymous_region(sup, sub).unwrap())
+            } else if self.is_named_region(sup) && self.is_anonymous_region(sub) {
+                (sup, self.find_arg_with_anonymous_region(sub, sup).unwrap())
+            } else {
+                return false; // inapplicable
+            };
+
+        if let Some(simple_name) = var.pat.simple_name() {
+            struct_span_err!(self.tcx.sess,
+                             var.pat.span,
+                             E0312,
+                             "explicit lifetime required in the type of `{}`",
+                             simple_name)
+                    .span_label(var.pat.span,
+                                format!("consider changing the type of `{}` to `{}`",
+                                        simple_name,
+                                        new_ty))
+                    .span_label(span, format!("lifetime `{}` required", named))
+                    .emit();
+
+        } else {
+            struct_span_err!(self.tcx.sess,
+                             var.pat.span,
+                             E0312,
+                             "explicit lifetime required in the type of pattern")
+                    .span_label(var.pat.span,
+                                format!("consider changing type of pattern to `{}`", new_ty))
+                    .span_label(span, format!("lifetime `{}` required", named))
+                    .emit();
+        }
+        return true;
+
+    }
+
+    pub fn report_region_errors(&self, errors: &Vec<RegionResolutionError<'tcx>>) {
         debug!("report_region_errors(): {} errors to start", errors.len());
 
         // try to pre-process the errors, which will group some of them
         // together into a `ProcessedErrors` group:
         let errors = self.process_errors(errors);
 
-        debug!("report_region_errors: {} errors after preprocessing", errors.len());
+        debug!("report_region_errors: {} errors after preprocessing",
+               errors.len());
 
         for error in errors {
 
             debug!("report_region_errors: error = {:?}", error);
+        // If ConcreteFailure does not have an anonymous region
             if !self.report_named_anon_conflict(&error){
                  
                match error.clone() {
