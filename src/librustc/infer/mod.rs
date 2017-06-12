@@ -1328,7 +1328,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                                region_map,
                                                free_regions);
         let errors = self.region_vars.resolve_regions(&region_rels);
-        
+
         if !self.is_tainted_by_errors() {
             // As a heuristic, just skip reporting region errors
             // altogether if other errors have been reported while

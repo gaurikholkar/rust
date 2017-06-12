@@ -398,11 +398,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             debug!("report_region_errors: error = {:?}", error);
         // If ConcreteFailure does not have an anonymous region
             if !self.report_named_anon_conflict(&error){
-                 
+
                match error.clone() {
 
                   ConcreteFailure(origin, sub, sup) => {
-                    
+
                       self.report_concrete_failure(origin, sub, sup).emit();
                   }
 
