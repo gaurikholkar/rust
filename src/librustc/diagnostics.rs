@@ -1883,6 +1883,31 @@ fn main() {
 ```
 "##,
 
+E0612: r##"
+Lifetime parameter is missing in one of the function argument. Erroneous 
+code example:
+
+```
+fn foo<'a>(x: &'a i32, y: &i32) -> &'a i32 { // compile_fail,E0612
+                    // ^ consider changing the type of `y` to `&'a i32`
+    if x > y { x } else { y }
+}                     // - lifetime `'a` required
+
+fn main () { }
+```
+
+Please add the missing lifetime parameter to remove this error. Example:
+
+```
+fn foo<'a>(x: &'a i32, y: &'a i32) -> &'a i32 {
+    if x > y { x } else { y }
+}
+
+fn main() {
+}
+```
+"##,
+
 }
 
 

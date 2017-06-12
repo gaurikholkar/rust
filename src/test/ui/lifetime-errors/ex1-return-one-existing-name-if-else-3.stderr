@@ -1,4 +1,4 @@
-error[E0312]: explicit lifetime required in the type of pattern
+error[E0612]: explicit lifetime required in the type of pattern
   --> $DIR/ex1-return-one-existing-name-if-else-3.rs:11:12
    |
 11 | fn foo<'a>((x, y): (&'a i32, &i32)) -> &'a i32 {
