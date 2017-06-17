@@ -14,6 +14,8 @@ use infer::InferCtxt;
 use ty::{self, Region};
 use infer::region_inference::RegionResolutionError::*;
 use infer::region_inference::RegionResolutionError;
+//use hir::def_id::DefId;
+use hir::map as hir_map;
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // This method walks the Type of the function body arguments using
@@ -23,12 +25,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // Currently only the case where the function declaration consists of
     // one named region and one anonymous region is handled.
     // Consider the example `fn foo<'a>(x: &'a i32, y: &i32) -> &'a i32`
-    // Here, the `y` and the `Ty` of `y` is returned after being substituted
-    // by that of the named region.
-    pub fn find_arg_with_anonymous_region(&self,
-                                          anon_region: Region<'tcx>,
-                                          named_region: Region<'tcx>)
-                                          -> Option<(&hir::Arg, ty::Ty<'tcx>)> {
+    // Here, we would return the hir::Arg for y, and we return the type &'a
+    // i32, which is the type of y but with the anonymous region replaced
+    // with 'a.
+    fn find_arg_with_anonymous_region(&self,
+                                      anon_region: Region<'tcx>,
+                                      named_region: Region<'tcx>)
+                                      -> Option<(&hir::Arg, ty::Ty<'tcx>)> {
 
         match *anon_region {
             ty::ReFree(ref free_region) => {
@@ -48,8 +51,14 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                                       &mut false,
                                                       |r, _| if *r == *anon_region {
                                                           found_anon_region = true;
+                                                          debug!("r = {}, anon_region={}",
+                                                                 r,
+                                                                 anon_region);
                                                           named_region
                                                       } else {
+                                                          debug!("r = {}, anon_region={}",
+                                                                 r,
+                                                                 anon_region);
                                                           r
                                                       });
                                     if found_anon_region {
@@ -70,29 +79,52 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // This method generates the error message for the case when
     // the function arguments consist of a named region and an anonymous
     // region and corresponds to `ConcreteFailure(..)`
-    pub fn report_named_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
+    pub fn try_report_named_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
 
         let (span, sub, sup) = match *error {
             ConcreteFailure(ref origin, sub, sup) => (origin.span(), sub, sup),
             _ => return false, // inapplicable
         };
 
-        let (named, (var, new_ty)) =
-            if self.is_named_region(sub) && self.is_anonymous_region(sup) {
-                (sub, self.find_arg_with_anonymous_region(sup, sub).unwrap())
-            } else if self.is_named_region(sup) && self.is_anonymous_region(sub) {
-                (sup, self.find_arg_with_anonymous_region(sub, sup).unwrap())
+        // Determine whether the sub and sup consist of one named region ('a)
+        // and one anonymous (elided) region. If so, find the parameter arg
+        // where the anonymous region appears (there must always be one; we
+        // only introduced anonymous regions in parameters) as well as a
+        // version new_ty of its type where the anonymous region is replaced
+        // with the named one.
+        let (anonymous, named, (arg, new_ty)) =
+            if self.is_named_region(sub) && self.is_suitable_anonymous_region(sup) {
+                (sup, sub, self.find_arg_with_anonymous_region(sup, sub).unwrap())
+            } else if self.is_named_region(sup) && self.is_suitable_anonymous_region(sub) {
+                (sub, sup, self.find_arg_with_anonymous_region(sub, sup).unwrap())
             } else {
                 return false; // inapplicable
             };
-
-        if let Some(simple_name) = var.pat.simple_name() {
+        debug!("named = {}, arg = {:?} new_ty = {} , anon ={}",
+               named,
+               arg,
+               new_ty,
+               anonymous);
+        /*
+        let ty = self.tcx.type_of(def_id);
+        match ty.sty
+           { ty::TyFnDef(_, _, sig) => {
+              let ret_ty = self.tcx.liberate_late_bound_regions(def_id, sig.output());
+              if ret_ty.walk().flat_map(|t| t.regions()).any(|r| r == anonymous){
+		return false;
+          }
+          else {}
+           },
+             _ => return false;
+           }
+*/
+        if let Some(simple_name) = arg.pat.simple_name() {
             struct_span_err!(self.tcx.sess,
                              span,
                              E0611,
                              "explicit lifetime required in the type of `{}`",
                              simple_name)
-                    .span_label(var.pat.span,
+                    .span_label(arg.pat.span,
                                 format!("consider changing the type of `{}` to `{}`",
                                         simple_name,
                                         new_ty))
@@ -104,12 +136,57 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                              span,
                              E0611,
                              "explicit lifetime required in parameter type")
-                    .span_label(var.pat.span,
+                    .span_label(arg.pat.span,
                                 format!("consider changing type to `{}`", new_ty))
                     .span_label(span, format!("lifetime `{}` required", named))
                     .emit();
         }
         return true;
 
+    }
+
+    // This method returns whether the given Region is Anonymous and
+    // the DefId corresponding to the FreeRegion
+    pub fn is_suitable_anonymous_region(&self, region: Region<'tcx>) -> bool {
+
+        match *region {
+            ty::ReFree(ref free_region) => {
+                match free_region.bound_region {
+                    ty::BrAnon(..) => {
+                        let anonymous_region_binding_scope = free_region.scope;
+                        let node_id = self.tcx
+                            .hir
+                            .as_local_node_id(anonymous_region_binding_scope)
+                            .unwrap();
+                        match self.tcx.hir.find(node_id) {
+                            Some(hir_map::NodeItem(..)) |
+                            Some(hir_map::NodeTraitItem(..)) => {
+                                // proceed ahead //
+                            }
+                            Some(hir_map::NodeImplItem(ref item)) => {
+                                if self.tcx
+                                       .impl_trait_ref()
+                                       .is_some(anonymous_region_binding_scope) {
+                                    // For now, we do not try to target impls of traits. This is
+                                    // because this message is going to suggest that the user
+                                    // change the fn signature, but they may not be free to do so,
+                                    // since the signature must match the trait.
+                                    //
+                                    // FIXME(#42706) -- in some cases, we could do better here.
+                                    return false; //None;
+                                } else {
+                                }
+
+                            }
+                            _ => return false, // inapplicable
+                            // we target only top-level functions
+                        }
+                        return true; //Some(anonymous_region_binding_scope);
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
     }
 }
