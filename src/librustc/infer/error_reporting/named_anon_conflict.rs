@@ -14,8 +14,9 @@ use infer::InferCtxt;
 use ty::{self, Region};
 use infer::region_inference::RegionResolutionError::*;
 use infer::region_inference::RegionResolutionError;
-//use hir::def_id::DefId;
+use hir::def_id::DefId;
 use hir::map as hir_map;
+use rustc_typeck::check::{Inherited,FnCtxt};
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // This method walks the Type of the function body arguments using
@@ -92,11 +93,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         // only introduced anonymous regions in parameters) as well as a
         // version new_ty of its type where the anonymous region is replaced
         // with the named one.
-        let (anonymous, named, (arg, new_ty)) =
-            if self.is_named_region(sub) && self.is_suitable_anonymous_region(sup) {
-                (sup, sub, self.find_arg_with_anonymous_region(sup, sub).unwrap())
-            } else if self.is_named_region(sup) && self.is_suitable_anonymous_region(sub) {
-                (sub, sup, self.find_arg_with_anonymous_region(sub, sup).unwrap())
+        let (anonymous, named, (arg, new_ty),defId) =
+            if self.is_named_region(sub) && self.is_suitable_anonymous_region(sup).is_some() {
+                (sup, sub, self.find_arg_with_anonymous_region(sup, sub).unwrap(),self.is_suitable_anonymous_region(sup).unwrap())
+            } else if self.is_named_region(sup) && self.is_suitable_anonymous_region(sub).is_some() {
+                (sub, sup, self.find_arg_with_anonymous_region(sub, sup).unwrap(),self.is_suitable_anonymous_region(sub).unwrap())
             } else {
                 return false; // inapplicable
             };
@@ -105,19 +106,20 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                arg,
                new_ty,
                anonymous);
-        /*
-        let ty = self.tcx.type_of(def_id);
+        
+        let ty = self.tcx.type_of(defId);
         match ty.sty
            { ty::TyFnDef(_, _, sig) => {
-              let ret_ty = self.tcx.liberate_late_bound_regions(def_id, sig.output());
+              let inh = Inherited::new(self,defId); 
+              let ret_ty = inh.liberate_late_bound_regions(defId, sig.output());
               if ret_ty.walk().flat_map(|t| t.regions()).any(|r| r == anonymous){
 		return false;
           }
           else {}
            },
-             _ => return false;
+             _ => return false,
            }
-*/
+
         if let Some(simple_name) = arg.pat.simple_name() {
             struct_span_err!(self.tcx.sess,
                              span,
@@ -147,7 +149,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
 
     // This method returns whether the given Region is Anonymous and
     // the DefId corresponding to the FreeRegion
-    pub fn is_suitable_anonymous_region(&self, region: Region<'tcx>) -> bool {
+    pub fn is_suitable_anonymous_region(&self, region: Region<'tcx>) -> Option<DefId> {
 
         match *region {
             ty::ReFree(ref free_region) => {
@@ -165,28 +167,28 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                             }
                             Some(hir_map::NodeImplItem(ref item)) => {
                                 if self.tcx
-                                       .impl_trait_ref()
-                                       .is_some(anonymous_region_binding_scope) {
+                                       .impl_trait_ref(self.tcx.associated_item(anonymous_region_binding_scope).container.id())
+                                       .is_some() {
                                     // For now, we do not try to target impls of traits. This is
                                     // because this message is going to suggest that the user
                                     // change the fn signature, but they may not be free to do so,
                                     // since the signature must match the trait.
                                     //
                                     // FIXME(#42706) -- in some cases, we could do better here.
-                                    return false; //None;
+                                    return None; //None;
                                 } else {
                                 }
 
                             }
-                            _ => return false, // inapplicable
+                            _ => return None, // inapplicable
                             // we target only top-level functions
                         }
-                        return true; //Some(anonymous_region_binding_scope);
+                        return Some(anonymous_region_binding_scope);
                     }
-                    _ => false,
+                    _ => None,
                 }
             }
-            _ => false,
+            _ => None,
         }
     }
 }
