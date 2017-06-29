@@ -10,6 +10,7 @@
 
 //! Error Reporting for Anonymous Region Lifetime Errors
 //! where one region is named and the other is anonymous.
+use hir;
 use infer::InferCtxt;
 use ty::{self, Region};
 use infer::region_inference::RegionResolutionError::*;
@@ -18,10 +19,66 @@ use hir::map as hir_map;
 use hir::def_id::DefId;
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
+    // This method walks the Type of the function body arguments using
+    // `fold_regions()` function and returns the
+    // &hir::Arg of the function argument corresponding to the anonymous
+    // region and the Ty corresponding to the named region.
+    // Currently only the case where the function declaration consists of
+    // one named region and one anonymous region is handled.
+    // Consider the example `fn foo<'a>(x: &'a i32, y: &i32) -> &'a i32`
+    // Here, we would return the hir::Arg for y, we return the type &'a
+    // i32, which is the type of y but with the anonymous region replaced
+    // with 'a, the corresponding bound region and is_first which is true if
+    // the hir::Arg is the first argument in the function declaration.
+    fn find_arg_with_anonymous_region
+        (&self,
+         anon_region: Region<'tcx>,
+         named_region: Region<'tcx>)
+         -> Option<(&hir::Arg, ty::Ty<'tcx>, ty::BoundRegion, bool)> {
+
+        match *anon_region {
+            ty::ReFree(ref free_region) => {
+
+                let id = free_region.scope;
+                let node_id = self.tcx.hir.as_local_node_id(id).unwrap();
+                let body_id = self.tcx.hir.maybe_body_owned_by(node_id).unwrap();
+                let body = self.tcx.hir.body(body_id);
+                if let Some(tables) = self.in_progress_tables {
+                    body.arguments
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, arg)| {
+                            let ty = tables.borrow().node_id_to_type(arg.id);
+                            let mut found_anon_region = false;
+                            let new_arg_ty = self.tcx
+                                .fold_regions(&ty, &mut false, |r, _| if *r == *anon_region {
+                                    found_anon_region = true;
+                                    named_region
+                                } else {
+                                    r
+                                });
+                            if found_anon_region {
+                                let is_first = index == 0;
+                                Some((arg, new_arg_ty, free_region.bound_region, is_first))
+                            } else {
+                                None
+                            }
+                        })
+                        .next()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+
+        }
+    }
+
     // This method generates the error message for the case when
     // the function arguments consist of a named region and an anonymous
     // region and corresponds to `ConcreteFailure(..)`
     pub fn try_report_named_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
+
         let (span, sub, sup) = match *error {
             ConcreteFailure(ref origin, sub, sup) => (origin.span(), sub, sup),
             _ => return false, // inapplicable
@@ -57,6 +114,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                     .collect_referenced_late_bound_regions(&sig.output());
                 if late_bound_regions.iter().any(|r| *r == br) {
                     return false;
+                } else {
                 }
             }
             _ => {}
@@ -77,8 +135,9 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         let (error_var, span_label_var) = if let Some(simple_name) = arg.pat.simple_name() {
             (format!("the type of `{}`", simple_name), format!("the type of `{}`", simple_name))
         } else {
-            ("parameter type".to_owned(), "type".to_owned())
+            (format!("parameter type"), format!("type"))
         };
+
 
         struct_span_err!(self.tcx.sess,
                          span,
@@ -91,11 +150,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                 .emit();
 
         return true;
+
     }
 
     // This method returns whether the given Region is Anonymous
     // and returns the DefId corresponding to the region.
     pub fn is_suitable_anonymous_region(&self, region: Region<'tcx>) -> Option<DefId> {
+
         match *region {
             ty::ReFree(ref free_region) => {
                 match free_region.bound_region {
@@ -136,4 +197,5 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             _ => None,
         }
     }
+
 }
