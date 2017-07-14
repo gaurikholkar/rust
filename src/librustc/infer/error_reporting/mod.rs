@@ -77,6 +77,10 @@ mod note;
 
 mod need_type_info;
 mod named_anon_conflict;
+<<<<<<< a0c611b4296e213f3d4a9825b95990ee9a017f2b
+=======
+mod anon_anon_conflict;
+>>>>>>> Adding anon_anon conflicts error code E0622
 
 impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     pub fn note_and_explain_region(self,
