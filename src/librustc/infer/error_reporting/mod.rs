@@ -76,6 +76,7 @@ use errors::{DiagnosticBuilder, DiagnosticStyledString};
 mod note;
 
 mod need_type_info;
+mod util;
 mod named_anon_conflict;
 <<<<<<< a0c611b4296e213f3d4a9825b95990ee9a017f2b
 =======

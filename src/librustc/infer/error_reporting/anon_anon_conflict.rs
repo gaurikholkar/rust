@@ -139,34 +139,37 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             return false; // inapplicable
         };
 
-        if let (Some(sup_arg),Some(sub_arg)) = 
-(self.find_arg_with_anonymous_region(sup,sup),
-self.find_arg_with_anonymous_region(sub,sub)){
-        let ((anon_arg1,_,_,_), (anon_arg2,_,_,_)) = (sup_arg, sub_arg);
+        if let (Some(sup_arg), Some(sub_arg)) =
+            (self.find_arg_with_anonymous_region(sup, sup),
+             self.find_arg_with_anonymous_region(sub, sub)) {
+            let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
 
-        let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
-            format!("from `{}`", simple_name)
+            let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
+                format!("from `{}`", simple_name)
+            } else {
+                format!("data flows here")
+            };
+
+            let span_label_var2 = if let Some(simple_name) = anon_arg2.pat.simple_name() {
+                format!("into `{}`", simple_name)
+            } else {
+                format!("")
+            };
+
+            struct_span_err!(self.tcx.sess, span, E0622, "lifetime mismatch")
+                .span_label(ty1.span,
+                            format!("these references must have the same lifetime"))
+                .span_label(ty2.span, format!(""))
+                .span_label(span,
+                            format!("data {} flows {} here", span_label_var1, span_label_var2))
+                .emit();
         } else {
-            format!("data flows here")
-        };
+            return false;
+        }
 
-        let span_label_var2 = if let Some(simple_name) = anon_arg2.pat.simple_name() {
-            format!("into `{}`", simple_name)
-        } else {
-            format!("")
-        };
+        return true;
+    }
 
-        struct_span_err!(self.tcx.sess, span, E0622, "lifetime mismatch")
-            .span_label(ty1.span,
-                        format!("these references must have the same lifetime"))
-            .span_label(ty2.span, format!(""))
-            .span_label(span, format!("data {} flows {} here",span_label_var1,span_label_var2))
-            .emit();
-  }else{return false;}
-      
-   return true;   
-   }
-   
 
     pub fn is_anonymous_region(&self, region: Region<'tcx>) -> Option<ty::BoundRegion> {
 
