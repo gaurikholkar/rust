@@ -147,7 +147,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
                 format!("from `{}`", simple_name)
             } else {
-                format!("data flows here")
+                format!("")
             };
 
             let span_label_var2 = if let Some(simple_name) = anon_arg2.pat.simple_name() {
