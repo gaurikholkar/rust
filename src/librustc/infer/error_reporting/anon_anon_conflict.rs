@@ -128,7 +128,6 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                             self.is_anonymous_region(sub).is_some() {
             let br1 = self.is_anonymous_region(sup).unwrap();
             let br2 = self.is_anonymous_region(sub).unwrap();
-
             if self.find_anon_type(sup, &br1).is_some() &&
                self.find_anon_type(sub, &br2).is_some() {
                 (self.find_anon_type(sup, &br1).unwrap(), self.find_anon_type(sub, &br2).unwrap())
@@ -138,12 +137,12 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         } else {
             return false; // inapplicable
         };
-
+        debug!("{:?} and {:?}",ty1,ty2);
         if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
             let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
-
+            debug!("arg1 = {:?} and arg2 = {:?}",anon_arg1,anon_arg2);
             let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
                 format!("from `{}`", simple_name)
             } else {
@@ -161,7 +160,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                             format!("these references must have the same lifetime"))
                 .span_label(ty2.span, format!(""))
                 .span_label(span,
-                            format!("data {} flows {} here", span_label_var1, span_label_var2))
+                            format!("data {}flows {}here", span_label_var1, span_label_var2))
                 .emit();
         } else {
             return false;
