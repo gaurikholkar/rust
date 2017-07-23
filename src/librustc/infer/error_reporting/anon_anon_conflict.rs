@@ -28,6 +28,55 @@ struct FindNestedTypeVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     found_type: Option<&'gcx hir::Ty>,
 }
 
+struct TyPathVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
+    infcx: &'a InferCtxt<'a, 'gcx, 'tcx>,
+    hir_map: &'a hir::map::Map<'gcx>,
+    found_it: Option<&'gcx hir::Ty>,
+    bound_region: ty::BoundRegion,
+    index: i32,
+}
+
+impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
+    fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'gcx> {
+        NestedVisitorMap::OnlyBodies(&self.hir_map)
+    }
+
+    fn visit_lifetime(&mut self, lifetime: &hir::Lifetime) {
+        let br_index = match self.bound_region {
+            ty::BrAnon(index) => index,
+            _ => return,
+        };
+
+
+        match self.infcx.tcx.named_region_map.defs.get(&lifetime.id) {
+            // the lifetime of the TyPath!
+            Some(&rl::Region::LateBoundAnon(debuijn_index, anon_index)) => {
+                if debuijn_index.depth == 1 && anon_index == br_index {
+                    self.found_it = self.looking_for;
+                    return; // we can stop visiting now
+                }
+            }
+            Some(&rl::Region::Static) |
+            Some(&rl::Region::EarlyBound(_, _)) |
+            Some(&rl::Region::LateBound(_, _)) |
+            Some(&rl::Region::Free(_, _)) |
+            None => {
+                debug!("no arg found");
+            }
+        }
+    }
+
+    fn visit_ty(&mut self, arg: &'gcx hir::Ty) {
+        // ignore nested types
+        //
+        // If you have a type like `Foo<'a, &Ty>` we
+        // are only interested in the immediate lifetimes ('a).
+        //
+        // Making `visit_ty` empty will ignore the `&Ty` embedded
+        // inside, it will get reached by the outer visitor.
+    }
+}
+
 impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
     fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'gcx> {
         NestedVisitorMap::OnlyBodies(&self.hir_map)
@@ -61,11 +110,20 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
                     }
                 }
             }
+            // check the source of ty for Resolved...
+            hir::TyPath(hir::QPath::Resolved(Some(ref ty), _)) => {
+                let mut subvisitor = &mut TyPathVisitor {
+                                              looking_for: Some(arg),
+                                              found_it: None,
+                                              index: 0,
+                                              bound_region: self.bound_region,
+                                          };
+                intravisit::walk_ty(subvisitor, ty); // <-- notice that I did `walk_ty`
+                if let Some(index) = subvisitor.found_it { /* call error_print method */ }
+            }
+
             _ => {}
         }
-        // walk the embedded contents: e.g., if we are visiting `Vec<&Foo>`,
-        // go on to visit `&Foo`
-        intravisit::walk_ty(self, arg);
     }
 }
 
@@ -109,6 +167,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                         _ => None,
                     }
                 }
+
                 _ => None,
             }
         } else {
@@ -137,12 +196,12 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         } else {
             return false; // inapplicable
         };
-        debug!("{:?} and {:?}",ty1,ty2);
+        debug!("{:?} and {:?}", ty1, ty2);
         if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
             let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
-            debug!("arg1 = {:?} and arg2 = {:?}",anon_arg1,anon_arg2);
+            debug!("arg1 = {:?} and arg2 = {:?}", anon_arg1, anon_arg2);
             let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
                 format!("from `{}`", simple_name)
             } else {
