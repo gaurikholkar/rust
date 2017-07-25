@@ -30,6 +30,7 @@ struct FindNestedTypeVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
 
 struct TyPathVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     infcx: &'a InferCtxt<'a, 'gcx, 'tcx>,
+    looking_for: Option<&'gcx hir::Ty>,
     hir_map: &'a hir::map::Map<'gcx>,
     found_it: Option<&'gcx hir::Ty>,
     bound_region: ty::BoundRegion,
@@ -53,8 +54,10 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
             Some(&rl::Region::LateBoundAnon(debuijn_index, anon_index)) => {
                 if debuijn_index.depth == 1 && anon_index == br_index {
                     self.found_it = self.looking_for;
-                    return; // we can stop visiting now
-                }
+		}
+		    self.index += 1                    
+
+                
             }
             Some(&rl::Region::Static) |
             Some(&rl::Region::EarlyBound(_, _)) |
@@ -74,6 +77,7 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
         //
         // Making `visit_ty` empty will ignore the `&Ty` embedded
         // inside, it will get reached by the outer visitor.
+       debug!("arg is {:?}",arg);
     }
 }
 
@@ -113,13 +117,16 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
             // check the source of ty for Resolved...
             hir::TyPath(hir::QPath::Resolved(Some(ref ty), _)) => {
                 let mut subvisitor = &mut TyPathVisitor {
+                                              infcx : self.infcx,
                                               looking_for: Some(arg),
                                               found_it: None,
                                               index: 0,
                                               bound_region: self.bound_region,
+                                              hir_map: self.hir_map,
                                           };
                 intravisit::walk_ty(subvisitor, ty); // <-- notice that I did `walk_ty`
-                if let Some(index) = subvisitor.found_it { /* call error_print method */ }
+                if let Some(index) = subvisitor.found_it { /* call error_print method */debug!("so struct detected, index = {:?} found_it={:?}",index, subvisitor.found_it);
+ }
             }
 
             _ => {}
