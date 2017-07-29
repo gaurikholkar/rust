@@ -18,6 +18,7 @@ use infer::region_inference::RegionResolutionError;
 use hir::map as hir_map;
 use middle::resolve_lifetime as rl;
 use hir::intravisit::{self, Visitor, NestedVisitorMap};
+use syntax_pos::Span;
 
 // The visitor captures the corresponding `hir::Ty` of the
 // anonymous region.
@@ -26,6 +27,8 @@ struct FindNestedTypeVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     hir_map: &'a hir::map::Map<'gcx>,
     bound_region: ty::BoundRegion,
     found_type: Option<&'gcx hir::Ty>,
+    is_struct: bool,
+    param_index: u32,
 }
 
 struct TyPathVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
@@ -34,7 +37,7 @@ struct TyPathVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     hir_map: &'a hir::map::Map<'gcx>,
     found_it: Option<&'gcx hir::Ty>,
     bound_region: ty::BoundRegion,
-    index: i32,
+    index: u32,
 }
 
 impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
@@ -126,8 +129,11 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
                                           };
                 intravisit::walk_ty(subvisitor, arg); //  call walk_ty; as visit_ty is empty,
                 // this will visit only outermost type
-                if let Some(index) = subvisitor.found_it {
-                  //  report_anon_anon_conflict_for_struct(&subvisitor)
+                if subvisitor.found_it.is_some() {
+                    let index = subvisitor.index;
+                    self.is_struct = true;
+                    self.param_index = index;
+                    //report_anon_anon_conflict_for_struct(&subvisitor)
                     debug!("so struct detected, index = {:?} found_it={:?}",
                            index,
                            subvisitor.found_it);
@@ -148,48 +154,41 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // This function calls the `visit_ty` method for the parameters
     // corresponding to the anonymous regions. The `nested_visitor.found_type`
     // contains the anonymous type.
-    pub fn find_anon_type(&self, region: Region<'tcx>, br: &ty::BoundRegion) -> Option<&hir::Ty> {
-        if self.is_suitable_anonymous_region(region).is_some() {
-            let def_id = self.is_suitable_anonymous_region(region).unwrap();
-            let node_id = self.tcx.hir.as_local_node_id(def_id).unwrap();
-            let ret_ty = self.tcx.type_of(def_id);
-            match ret_ty.sty {
-                ty::TyFnDef(_, _) => {
-                    match self.tcx.hir.get(node_id) {
-                        hir_map::NodeItem(it) => {
-                            match it.node {
-                                hir::ItemFn(ref fndecl, _, _, _, _, _) => {
-                                    fndecl
-                                        .inputs
-                                        .iter()
-                                        .filter_map(|arg| {
-                                            let mut nested_visitor = FindNestedTypeVisitor {
-                                                infcx: &self,
-                                                hir_map: &self.tcx.hir,
-                                                bound_region: *br,
-                                                found_type: None,
-                                            };
-                                            nested_visitor.visit_ty(&**arg);
-                                            if nested_visitor.found_type.is_some() {
-                                                return nested_visitor.found_type;
-                                            } else {
-                                                return None;
-                                            }
-                                        })
-                                        .next()
-                                }
-                                _ => None,
-                            }
+    pub fn find_anon_type(&self,
+                          region: Region<'tcx>,
+                          br: &ty::BoundRegion)
+                          -> Option<(&hir::Ty, bool, u32)> {
+        if let Some(anon_reg) = self.is_suitable_anonymous_region(region) {
+            let (def_id, _) = anon_reg;
+            if let Some(node_id) = self.tcx.hir.as_local_node_id(def_id) {
+                let ret_ty = self.tcx.type_of(def_id);
+                if let ty::TyFnDef(_, _) = ret_ty.sty {
+                    if let hir_map::NodeItem(it) = self.tcx.hir.get(node_id) {
+                        if let hir::ItemFn(ref fndecl, _, _, _, _, _) = it.node {
+                            return fndecl
+                                       .inputs
+                                       .iter()
+                                       .filter_map(|arg| {
+                                let mut nested_visitor = FindNestedTypeVisitor {
+                                    infcx: &self,
+                                    hir_map: &self.tcx.hir,
+                                    bound_region: *br,
+                                    found_type: None,
+                                    is_struct: false,
+                                    param_index: 0,
+                                };
+                                nested_visitor.visit_ty(&**arg);
+                                nested_visitor.found_type.map(|found_type| {
+  (found_type, nested_visitor.is_struct, nested_visitor.param_index)
+})
+                            })
+                                       .next();
                         }
-                        _ => None,
                     }
                 }
-
-                _ => None,
             }
-        } else {
-            None
         }
+        None
     }
 
     pub fn try_report_anon_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
@@ -199,20 +198,43 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             _ => return false, // inapplicable
         };
 
-        // Determine whether the sub and sup consist of both anonymous (elided) regions.
-        let (ty1, ty2) = if self.is_anonymous_region(sup).is_some() &&
-                            self.is_anonymous_region(sub).is_some() {
-            let br1 = self.is_anonymous_region(sup).unwrap();
-            let br2 = self.is_anonymous_region(sub).unwrap();
-            if self.find_anon_type(sup, &br1).is_some() &&
-               self.find_anon_type(sub, &br2).is_some() {
-                (self.find_anon_type(sup, &br1).unwrap(), self.find_anon_type(sub, &br2).unwrap())
+        let (ty1, ty2) = if self.is_suitable_anonymous_region(sup).is_some() &&
+                            self.is_suitable_anonymous_region(sub).is_some() {
+            if let (Some(anon_reg1), Some(anon_reg2)) =
+                (self.is_suitable_anonymous_region(sup), self.is_suitable_anonymous_region(sub)) {
+                let ((_, br1), (_, br2)) = (anon_reg1, anon_reg2);
+                if self.find_anon_type(sup, &br1).is_some() &&
+                   self.find_anon_type(sub, &br2).is_some() {
+                    if let (Some(anon_type1), Some(anon_type2)) =
+                        (self.find_anon_type(sup, &br1), self.find_anon_type(sub, &br2)) {
+                        let ((anonarg_1, is_struct_1, index_1), (anonarg_2, is_struct_2, index_2)) =
+                        (anon_type1, anon_type2);
+                        if is_struct_1 || is_struct_2 {
+                            return self.try_report_struct_anon_anon_conflict(anonarg_1,
+                                                                             anonarg_2,
+                                                                             is_struct_1,
+                                                                             is_struct_2,
+                                                                             index_1,
+                                                                             index_2,
+                                                                             span);
+
+                        } else {
+                            (anonarg_1, anonarg_2)
+                        }
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                } // after this add
             } else {
                 return false;
             }
         } else {
             return false; // inapplicable
         };
+
+
         debug!("{:?} and {:?}", ty1, ty2);
         if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
@@ -245,47 +267,37 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         return true;
     }
 
-
-    pub fn is_anonymous_region(&self, region: Region<'tcx>) -> Option<ty::BoundRegion> {
-
-        match *region {
-            ty::ReFree(ref free_region) => {
-                match free_region.bound_region {
-                    ty::BrAnon(..) => {
-                        let anonymous_region_binding_scope = free_region.scope;
-                        let node_id = self.tcx
-                            .hir
-                            .as_local_node_id(anonymous_region_binding_scope)
-                            .unwrap();
-                        match self.tcx.hir.find(node_id) {
-                            Some(hir_map::NodeItem(..)) |
-                            Some(hir_map::NodeTraitItem(..)) => {
-                                // proceed ahead //
-                            }
-                            Some(hir_map::NodeImplItem(..)) => {
-                                let container_id = self.tcx
-                                    .associated_item(anonymous_region_binding_scope)
-                                    .container
-                                    .id();
-                                if self.tcx.impl_trait_ref(container_id).is_some() {
-                                    // For now, we do not try to target impls of traits. This is
-                                    // because this message is going to suggest that the user
-                                    // change the fn signature, but they may not be free to do so,
-                                    // since the signature must match the trait.
-                                    //
-                                    // FIXME(#42706) -- in some cases, we could do better here.
-                                    return None;
-                                }
-                            }
-                            _ => return None, // inapplicable
-                            // we target only top-level functions
-                        }
-                        return Some(free_region.bound_region);
-                    }
-                    _ => None,
-                }
+    fn try_report_struct_anon_anon_conflict(&self,
+                                            ty1: &hir::Ty,
+                                            ty2: &hir::Ty,
+                                            is_arg1_struct: bool,
+                                            is_arg2_struct: bool,
+                                            index1: u32,
+                                            index2: u32,
+                                            span: Span)
+                                            -> bool {
+        let arg1_label = {
+            if is_arg1_struct {
+                format!("{} lifetime parameter must match", index1)
+            } else {
+                format!("lifetime parameter must match")
             }
-            _ => None,
-        }
+        };
+
+        let arg2_label = {
+            if is_arg2_struct {
+                format!("{} lifetime parameter must match", index2)
+            } else {
+                format!("slifetime parameter must match")
+            }
+        };
+
+
+        struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
+            .span_label(ty1.span, format!("{}", arg1_label))
+            .span_label(ty2.span, format!("{}", arg2_label))
+            .emit();
+        return true;
+
     }
 }

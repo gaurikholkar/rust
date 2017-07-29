@@ -13,6 +13,8 @@
 use hir;
 use infer::InferCtxt;
 use ty::{self, Region};
+use hir::def_id::DefId;
+use hir::map as hir_map;
 
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // This method walks the Type of the function body arguments using
@@ -32,41 +34,87 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
          replace_region: Region<'tcx>)
          -> Option<(&hir::Arg, ty::Ty<'tcx>, ty::BoundRegion, bool)> {
 
-        match *anon_region {
-            ty::ReFree(ref free_region) => {
+        if let ty::ReFree(ref free_region) = *anon_region {
 
-                let id = free_region.scope;
-                let node_id = self.tcx.hir.as_local_node_id(id).unwrap();
-                let body_id = self.tcx.hir.maybe_body_owned_by(node_id).unwrap();
-                let body = self.tcx.hir.body(body_id);
-                if let Some(tables) = self.in_progress_tables {
-                    body.arguments
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, arg)| {
-                            let ty = tables.borrow().node_id_to_type(arg.id);
-                            let mut found_anon_region = false;
-                            let new_arg_ty = self.tcx
-                                .fold_regions(&ty, &mut false, |r, _| if *r == *anon_region {
-                                    found_anon_region = true;
-                                    replace_region
+            let id = free_region.scope;
+            let hir = &self.tcx.hir;
+            if let Some(node_id) = hir.as_local_node_id(id) {
+                if let Some(body_id) = hir.maybe_body_owned_by(node_id) {
+                    let body = hir.body(body_id);
+                    if let Some(tables) = self.in_progress_tables {
+                        body.arguments
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(index, arg)| {
+                                let ty = tables.borrow().node_id_to_type(arg.id);
+                                let mut found_anon_region = false;
+                                let new_arg_ty = self.tcx
+                                    .fold_regions(&ty, &mut false, |r, _| if *r == *anon_region {
+                                        found_anon_region = true;
+                                        replace_region
+                                    } else {
+                                        r
+                                    });
+                                if found_anon_region {
+                                    let is_first = index == 0;
+                                    Some((arg, new_arg_ty, free_region.bound_region, is_first))
                                 } else {
-                                    r
-                                });
-                            if found_anon_region {
-                                let is_first = index == 0;
-                                Some((arg, new_arg_ty, free_region.bound_region, is_first))
-                            } else {
-                                None
-                            }
-                        })
-                        .next()
+                                    None
+                                }
+                            })
+                            .next()
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
+            } else {
+                None
             }
-            _ => None,
-
+        } else {
+            None
         }
     }
+
+    // This method returns whether the given Region is Anonymous
+    // and returns the DefId and the BoundRegion corresponding to the given region.
+    pub fn is_suitable_anonymous_region(&self,
+                                        region: Region<'tcx>)
+                                        -> Option<(DefId, ty::BoundRegion)> {
+        if let ty::ReFree(ref free_region) = *region {
+            if let ty::BrAnon(..) = free_region.bound_region{
+                    let anonymous_region_binding_scope = free_region.scope;
+                    let node_id = self.tcx
+                        .hir
+                        .as_local_node_id(anonymous_region_binding_scope)
+                        .unwrap();
+                    match self.tcx.hir.find(node_id) {
+                        Some(hir_map::NodeItem(..)) |
+                        Some(hir_map::NodeTraitItem(..)) => {
+                            // Success -- proceed to return Some below
+                        }
+                        Some(hir_map::NodeImplItem(..)) => {
+                            let container_id = self.tcx
+                                .associated_item(anonymous_region_binding_scope)
+                                .container
+                                .id();
+                            if self.tcx.impl_trait_ref(container_id).is_some() {
+                                // For now, we do not try to target impls of traits. This is
+                                // because this message is going to suggest that the user
+                                // change the fn signature, but they may not be free to do so,
+                                // since the signature must match the trait.
+                                //
+                                // FIXME(#42706) -- in some cases, we could do better here.
+                                return None;
+                            }
+                        }
+                        _ => return None, // inapplicable
+                        // we target only top-level functions
+                    }
+                    return Some((anonymous_region_binding_scope, free_region.bound_region));
+                }
+            }
+            None
+        }
 }
