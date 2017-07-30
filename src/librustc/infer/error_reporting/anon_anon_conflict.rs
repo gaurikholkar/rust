@@ -28,16 +28,13 @@ struct FindNestedTypeVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     bound_region: ty::BoundRegion,
     found_type: Option<&'gcx hir::Ty>,
     is_struct: bool,
-    param_index: u32,
 }
 
 struct TyPathVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     infcx: &'a InferCtxt<'a, 'gcx, 'tcx>,
-    looking_for: Option<&'gcx hir::Ty>,
     hir_map: &'a hir::map::Map<'gcx>,
-    found_it: Option<&'gcx hir::Ty>,
+    found_it: bool,
     bound_region: ty::BoundRegion,
-    index: u32,
 }
 
 impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
@@ -56,9 +53,10 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
             // the lifetime of the TyPath!
             Some(&rl::Region::LateBoundAnon(debuijn_index, anon_index)) => {
                 if debuijn_index.depth == 1 && anon_index == br_index {
-                    self.found_it = self.looking_for;
+                    self.found_it = true;
+                    debug!("executing loop");
                 }
-                self.index += 1
+          
 
 
             }
@@ -121,21 +119,16 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
                 debug!("Typath node 2 {:?}", arg);
                 let mut subvisitor = &mut TyPathVisitor {
                                               infcx: self.infcx,
-                                              looking_for: Some(arg),
-                                              found_it: None,
-                                              index: 0,
+                                              found_it: false,
                                               bound_region: self.bound_region,
                                               hir_map: self.hir_map,
                                           };
                 intravisit::walk_ty(subvisitor, arg); //  call walk_ty; as visit_ty is empty,
                 // this will visit only outermost type
-                if subvisitor.found_it.is_some() {
-                    let index = subvisitor.index;
+                if subvisitor.found_it {
                     self.is_struct = true;
-                    self.param_index = index;
-                    //report_anon_anon_conflict_for_struct(&subvisitor)
-                    debug!("so struct detected, index = {:?} found_it={:?}",
-                           index,
+                    self.found_type = Some(arg);
+                    debug!("so struct detected, index = {:?}",
                            subvisitor.found_it);
                 } else {
                     debug!("visit.found_it == None");
@@ -144,7 +137,6 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
             }
 
             _ => {
-                debug!("arg is of type ={:?}", arg.node);
             }
         }
     }
@@ -157,7 +149,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     pub fn find_anon_type(&self,
                           region: Region<'tcx>,
                           br: &ty::BoundRegion)
-                          -> Option<(&hir::Ty, bool, u32)> {
+                          -> Option<(&hir::Ty, bool)> {
         if let Some(anon_reg) = self.is_suitable_anonymous_region(region) {
             let (def_id, _) = anon_reg;
             if let Some(node_id) = self.tcx.hir.as_local_node_id(def_id) {
@@ -175,11 +167,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                     bound_region: *br,
                                     found_type: None,
                                     is_struct: false,
-                                    param_index: 0,
                                 };
                                 nested_visitor.visit_ty(&**arg);
+                                debug!("ft = {:?} bool={:?}",nested_visitor.found_type, nested_visitor.is_struct);
                                 nested_visitor.found_type.map(|found_type| {
-  (found_type, nested_visitor.is_struct, nested_visitor.param_index)
+  (found_type, nested_visitor.is_struct)
 })
                             })
                                        .next();
@@ -207,15 +199,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                    self.find_anon_type(sub, &br2).is_some() {
                     if let (Some(anon_type1), Some(anon_type2)) =
                         (self.find_anon_type(sup, &br1), self.find_anon_type(sub, &br2)) {
-                        let ((anonarg_1, is_struct_1, index_1), (anonarg_2, is_struct_2, index_2)) =
+                        let ((anonarg_1, is_struct_1), (anonarg_2, is_struct_2)) =
                         (anon_type1, anon_type2);
                         if is_struct_1 || is_struct_2 {
                             return self.try_report_struct_anon_anon_conflict(anonarg_1,
                                                                              anonarg_2,
                                                                              is_struct_1,
-                                                                             is_struct_2,
-                                                                             index_1,
-                                                                             index_2,
+                                                                             is_struct_2,                                                                          
                                                                              span);
 
                         } else {
@@ -272,13 +262,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                             ty2: &hir::Ty,
                                             is_arg1_struct: bool,
                                             is_arg2_struct: bool,
-                                            index1: u32,
-                                            index2: u32,
                                             span: Span)
                                             -> bool {
         let arg1_label = {
             if is_arg1_struct {
-                format!("{} lifetime parameter must match", index1)
+                format!("lifetime parameter must match")
             } else {
                 format!("lifetime parameter must match")
             }
@@ -286,14 +274,14 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
 
         let arg2_label = {
             if is_arg2_struct {
-                format!("{} lifetime parameter must match", index2)
+                format!("lifetime parameter must match")
             } else {
                 format!("slifetime parameter must match")
             }
         };
 
 
-        struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
+        struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
             .span_label(ty1.span, format!("{}", arg1_label))
             .span_label(ty2.span, format!("{}", arg2_label))
             .emit();
