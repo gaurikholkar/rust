@@ -210,8 +210,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                                                              is_struct_1,
                                                                              is_struct_2,
                                                                              span,
+<<<<<<< HEAD
                                                                              sup,
                                                                              sub);
+=======
+sup,
+sub);
+>>>>>>> 122b4d2... non working changes
 
                         } else {
                             (anonarg_1, anonarg_2)
@@ -228,12 +233,8 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         } else {
             return false; // inapplicable
         };
-
-
         debug!("{:?} and {:?}", ty1, ty2);
-
-
-        if let Some(error_label) = self.process_anon_anon_error(sup, sub) {
+            if let Some(error_label) = self.process_anon_anon_error(sup,sub){
             let (span_label_var1, span_label_var2) = error_label;
 
             struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
@@ -241,14 +242,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                             format!("these references must have the same lifetime"))
                 .span_label(ty2.span, format!(""))
                 .span_label(span,
-                            format!("data {}flows {}here", span_label_var1, span_label_var2))
+                            format!("data {} flows {} here", span_label_var1, span_label_var2))
                 .emit();
             return true;
-
         } else {
             return false;
         }
-    }
+ }
 
     fn try_report_struct_anon_anon_conflict(&self,
                                             ty1: &hir::Ty,
@@ -269,11 +269,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             }
         };
         if let Some(label) = self.process_anon_anon_error(sup, sub) {
-            let (label1, _) = label;
+            let (label1, label2) = label;
             struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
                 .span_label(ty1.span, format!("{}", arg1_label))
                 .span_label(ty2.span, format!(""))
-                .span_label(span,format!("data {}flows {}here", label1))
+                .span_label(span,format!("data {} flows {} here", label1, label2))
                 .emit();
         } else {
             return false;
@@ -282,16 +282,14 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
 
     }
 
-    fn process_anon_anon_error(&self,
-                               sup: Region<'tcx>,
-                               sub: Region<'tcx>)
-                               -> Option<(String, String)> {
+  fn process_anon_anon_error(&self,sup: Region<'tcx>, sub: Region<'tcx> )->Option<(String,String)>{
 
-        if let (Some(sup_arg), Some(sub_arg)) =
+  if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
-            let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
-            let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
+            let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg,
+ sub_arg);
+  let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
                 format!("from `{}`", simple_name)
             } else {
                 format!("")
