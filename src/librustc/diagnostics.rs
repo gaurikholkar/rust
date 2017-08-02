@@ -2027,4 +2027,5 @@ register_diagnostics! {
     E0566, // conflicting representation hints
     E0587, // conflicting packed and align representation hints
     E0623, // lifetime mismatch where both parameters are anonymous regions
+    E0624, // lifetime mismatch where both parameters are anonymous regions, one or more are structs
 }

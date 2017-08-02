@@ -54,11 +54,13 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
             Some(&rl::Region::LateBoundAnon(debuijn_index, anon_index)) => {
                 if debuijn_index.depth == 1 && anon_index == br_index {
                     self.found_it = true;
-                    debug!("executing loop");
+
+                    debug!("executing loop debuijn_index.depth={:?}
+ anon_index= {:},branon_index={:?} ",
+                           debuijn_index.depth,
+                           anon_index,
+                           br_index);
                 }
-          
-
-
             }
             Some(&rl::Region::Static) |
             Some(&rl::Region::EarlyBound(_, _)) |
@@ -128,17 +130,16 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
                 if subvisitor.found_it {
                     self.is_struct = true;
                     self.found_type = Some(arg);
-                    debug!("so struct detected, index = {:?}",
-                           subvisitor.found_it);
+                    debug!("so struct detected, index = {:?}", subvisitor.found_it);
                 } else {
                     debug!("visit.found_it == None");
                 }
 
             }
 
-            _ => {
-            }
+            _ => {}
         }
+        intravisit::walk_ty(self, arg);
     }
 }
 
@@ -169,10 +170,12 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                     is_struct: false,
                                 };
                                 nested_visitor.visit_ty(&**arg);
-                                debug!("ft = {:?} bool={:?}",nested_visitor.found_type, nested_visitor.is_struct);
-                                nested_visitor.found_type.map(|found_type| {
-  (found_type, nested_visitor.is_struct)
-})
+                                debug!("ft = {:?} bool={:?}",
+                                       nested_visitor.found_type,
+                                       nested_visitor.is_struct);
+                                nested_visitor
+                                    .found_type
+                                    .map(|found_type| (found_type, nested_visitor.is_struct))
                             })
                                        .next();
                         }
@@ -199,13 +202,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                    self.find_anon_type(sub, &br2).is_some() {
                     if let (Some(anon_type1), Some(anon_type2)) =
                         (self.find_anon_type(sup, &br1), self.find_anon_type(sub, &br2)) {
-                        let ((anonarg_1, is_struct_1), (anonarg_2, is_struct_2)) =
-                        (anon_type1, anon_type2);
+                        let ((anonarg_1, is_struct_1), (anonarg_2, is_struct_2)) = (anon_type1,
+                                                                                    anon_type2);
                         if is_struct_1 || is_struct_2 {
                             return self.try_report_struct_anon_anon_conflict(anonarg_1,
                                                                              anonarg_2,
                                                                              is_struct_1,
-                                                                             is_struct_2,                                                                          
+                                                                             is_struct_2,
                                                                              span);
 
                         } else {
@@ -265,25 +268,21 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                             span: Span)
                                             -> bool {
         let arg1_label = {
-            if is_arg1_struct {
-                format!("lifetime parameter must match")
+            if is_arg1_struct && is_arg2_struct {
+                format!("these two structs are not declared with the same lifetime...")
+            } else if is_arg1_struct && !is_arg2_struct {
+                format!("the struct and reference must have same lifetime")
             } else {
-                format!("lifetime parameter must match")
+                format!("the reference and struct must have same lifetime")
             }
         };
 
-        let arg2_label = {
-            if is_arg2_struct {
-                format!("lifetime parameter must match")
-            } else {
-                format!("slifetime parameter must match")
-            }
-        };
+
 
 
         struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
             .span_label(ty1.span, format!("{}", arg1_label))
-            .span_label(ty2.span, format!("{}", arg2_label))
+            .span_label(ty2.span, format!(""))
             .emit();
         return true;
 
