@@ -209,7 +209,9 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                                                              anonarg_2,
                                                                              is_struct_1,
                                                                              is_struct_2,
-                                                                             span);
+                                                                             span,
+                                                                             sup,
+                                                                             sub);
 
                         } else {
                             (anonarg_1, anonarg_2)
@@ -229,11 +231,66 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
 
 
         debug!("{:?} and {:?}", ty1, ty2);
+
+
+        if let Some(error_label) = self.process_anon_anon_error(sup, sub) {
+            let (span_label_var1, span_label_var2) = error_label;
+
+            struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
+                .span_label(ty1.span,
+                            format!("these references must have the same lifetime"))
+                .span_label(ty2.span, format!(""))
+                .span_label(span,
+                            format!("data {}flows {}here", span_label_var1, span_label_var2))
+                .emit();
+            return true;
+
+        } else {
+            return false;
+        }
+    }
+
+    fn try_report_struct_anon_anon_conflict(&self,
+                                            ty1: &hir::Ty,
+                                            ty2: &hir::Ty,
+                                            is_arg1_struct: bool,
+                                            is_arg2_struct: bool,
+                                            span: Span,
+                                            sup: Region<'tcx>,
+                                            sub: Region<'tcx>)
+                                            -> bool {
+        let arg1_label = {
+            if is_arg1_struct && is_arg2_struct {
+                format!("these two structs are declared with different lifetimes...")
+            } else if is_arg1_struct && !is_arg2_struct {
+                format!("the struct and reference are declared with different lifetimes")
+            } else {
+                format!("the reference and struct are declared with different lifetimes")
+            }
+        };
+        if let Some(label) = self.process_anon_anon_error(sup, sub) {
+            let (label1, _) = label;
+            struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
+                .span_label(ty1.span, format!("{}", arg1_label))
+                .span_label(ty2.span, format!(""))
+                .span_label(span,format!("data {}flows {}here", label1))
+                .emit();
+        } else {
+            return false;
+        }
+        true
+
+    }
+
+    fn process_anon_anon_error(&self,
+                               sup: Region<'tcx>,
+                               sub: Region<'tcx>)
+                               -> Option<(String, String)> {
+
         if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
             let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
-            debug!("arg1 = {:?} and arg2 = {:?}", anon_arg1, anon_arg2);
             let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
                 format!("from `{}`", simple_name)
             } else {
@@ -246,45 +303,9 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                 format!("")
             };
 
-            struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
-                .span_label(ty1.span,
-                            format!("these references must have the same lifetime"))
-                .span_label(ty2.span, format!(""))
-                .span_label(span,
-                            format!("data {}flows {}here", span_label_var1, span_label_var2))
-                .emit();
+            Some((span_label_var1, span_label_var2))
         } else {
-            return false;
+            None
         }
-
-        return true;
-    }
-
-    fn try_report_struct_anon_anon_conflict(&self,
-                                            ty1: &hir::Ty,
-                                            ty2: &hir::Ty,
-                                            is_arg1_struct: bool,
-                                            is_arg2_struct: bool,
-                                            span: Span)
-                                            -> bool {
-        let arg1_label = {
-            if is_arg1_struct && is_arg2_struct {
-                format!("these two structs are not declared with the same lifetime...")
-            } else if is_arg1_struct && !is_arg2_struct {
-                format!("the struct and reference must have same lifetime")
-            } else {
-                format!("the reference and struct must have same lifetime")
-            }
-        };
-
-
-
-
-        struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
-            .span_label(ty1.span, format!("{}", arg1_label))
-            .span_label(ty2.span, format!(""))
-            .emit();
-        return true;
-
     }
 }
