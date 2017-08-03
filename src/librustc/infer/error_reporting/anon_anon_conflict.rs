@@ -241,7 +241,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                             format!("these references must have the same lifetime"))
                 .span_label(ty2.span, format!(""))
                 .span_label(span,
-                            format!("data {}flows {}here", span_label_var1, span_label_var2))
+                            format!("data {} flows {} here", span_label_var1, span_label_var2))
                 .emit();
             return true;
 
@@ -269,11 +269,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             }
         };
         if let Some(label) = self.process_anon_anon_error(sup, sub) {
-            let (label1, _) = label;
+            let (label1, label2) = label;
             struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
                 .span_label(ty1.span, format!("{}", arg1_label))
                 .span_label(ty2.span, format!(""))
-                .span_label(span,format!("data {}flows {}here", label1))
+                .span_label(span, format!("data {} flows {} here", label1, label2))
                 .emit();
         } else {
             return false;
