@@ -210,14 +210,8 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                                                              is_struct_1,
                                                                              is_struct_2,
                                                                              span,
-<<<<<<< HEAD
                                                                              sup,
                                                                              sub);
-=======
-sup,
-sub);
->>>>>>> 122b4d2... non working changes
-
                         } else {
                             (anonarg_1, anonarg_2)
                         }
@@ -273,7 +267,7 @@ sub);
             struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
                 .span_label(ty1.span, format!("{}", arg1_label))
                 .span_label(ty2.span, format!(""))
-                .span_label(span,format!("data {} flows {} here", label1, label2))
+                .span_label(span, format!("data {} flows {} here", label1, label2))
                 .emit();
         } else {
             return false;
