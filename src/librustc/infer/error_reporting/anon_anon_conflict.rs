@@ -269,11 +269,11 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             }
         };
         if let Some(label) = self.process_anon_anon_error(sup, sub) {
-            let (label1, label2) = label;
+            let (label1, _) = label;
             struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
                 .span_label(ty1.span, format!("{}", arg1_label))
                 .span_label(ty2.span, format!(""))
-                .span_label(span,format!("data {}flows {}here", label1, label2))
+                .span_label(span,format!("data {}flows {}here", label1))
                 .emit();
         } else {
             return false;
