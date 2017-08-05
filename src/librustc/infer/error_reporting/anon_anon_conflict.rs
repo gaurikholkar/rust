@@ -18,7 +18,6 @@ use infer::region_inference::RegionResolutionError;
 use hir::map as hir_map;
 use middle::resolve_lifetime as rl;
 use hir::intravisit::{self, Visitor, NestedVisitorMap};
-use syntax_pos::Span;
 
 // The visitor captures the corresponding `hir::Ty` of the
 // anonymous region.
@@ -30,6 +29,8 @@ struct FindNestedTypeVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     is_struct: bool,
 }
 
+// The visitor captures the corresponding `hir::Ty` of the anonymous region
+// in the case of structs.
 struct TyPathVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     infcx: &'a InferCtxt<'a, 'gcx, 'tcx>,
     hir_map: &'a hir::map::Map<'gcx>,
@@ -54,12 +55,6 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
             Some(&rl::Region::LateBoundAnon(debuijn_index, anon_index)) => {
                 if debuijn_index.depth == 1 && anon_index == br_index {
                     self.found_it = true;
-
-                    debug!("executing loop debuijn_index.depth={:?}
- anon_index= {:},branon_index={:?} ",
-                           debuijn_index.depth,
-                           anon_index,
-                           br_index);
                 }
             }
             Some(&rl::Region::Static) |
@@ -80,7 +75,6 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for TyPathVisitor<'a, 'gcx, 'tcx> {
         //
         // Making `visit_ty` empty will ignore the `&Ty` embedded
         // inside, it will get reached by the outer visitor.
-        debug!("arg is {:?}", arg);
     }
 }
 
@@ -118,7 +112,6 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
                 }
             }
             hir::TyPath(_) => {
-                debug!("Typath node 2 {:?}", arg);
                 let mut subvisitor = &mut TyPathVisitor {
                                               infcx: self.infcx,
                                               found_it: false,
@@ -130,9 +123,7 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
                 if subvisitor.found_it {
                     self.is_struct = true;
                     self.found_type = Some(arg);
-                    debug!("so struct detected, index = {:?}", subvisitor.found_it);
                 } else {
-                    debug!("visit.found_it == None");
                 }
 
             }
@@ -170,9 +161,6 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                     is_struct: false,
                                 };
                                 nested_visitor.visit_ty(&**arg);
-                                debug!("ft = {:?} bool={:?}",
-                                       nested_visitor.found_type,
-                                       nested_visitor.is_struct);
                                 nested_visitor
                                     .found_type
                                     .map(|found_type| (found_type, nested_visitor.is_struct))
@@ -193,111 +181,85 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             _ => return false, // inapplicable
         };
 
-        let (ty1, ty2) = if self.is_suitable_anonymous_region(sup).is_some() &&
-                            self.is_suitable_anonymous_region(sub).is_some() {
+        let (ty1, ty2, first_is_struct, second_is_struct) = if
+            self.is_suitable_anonymous_region(sup).is_some() &&
+            self.is_suitable_anonymous_region(sub).is_some() {
             if let (Some(anon_reg1), Some(anon_reg2)) =
                 (self.is_suitable_anonymous_region(sup), self.is_suitable_anonymous_region(sub)) {
                 let ((_, br1), (_, br2)) = (anon_reg1, anon_reg2);
-                if self.find_anon_type(sup, &br1).is_some() &&
-                   self.find_anon_type(sub, &br2).is_some() {
-                    if let (Some(anon_type1), Some(anon_type2)) =
-                        (self.find_anon_type(sup, &br1), self.find_anon_type(sub, &br2)) {
-                        let ((anonarg_1, is_struct_1), (anonarg_2, is_struct_2)) = (anon_type1,
-                                                                                    anon_type2);
-                        if is_struct_1 || is_struct_2 {
-                            return self.try_report_struct_anon_anon_conflict(anonarg_1,
-                                                                             anonarg_2,
-                                                                             is_struct_1,
-                                                                             is_struct_2,
-                                                                             span,
-                                                                             sup,
-                                                                             sub);
-                        } else {
-                            (anonarg_1, anonarg_2)
-                        }
-                    } else {
+                let found_arg1 = self.find_anon_type(sup, &br1);
+                let found_arg2 = self.find_anon_type(sub, &br2);
+
+                match (found_arg1, found_arg2) {
+                    (Some((anonarg_1, is_struct1)), Some((anonarg_2, is_struct2))) => {
+                        (anonarg_1, anonarg_2, is_struct1, is_struct2)
+                    }
+                    _ => {
                         return false;
                     }
-                } else {
-                    return false;
-                } // after this add
+                }
+
             } else {
                 return false;
             }
         } else {
-            return false; // inapplicable
+            return false; //inapplicable
         };
-        debug!("{:?} and {:?}", ty1, ty2);
-            if let Some(error_label) = self.process_anon_anon_error(sup,sub){
-            let (span_label_var1, span_label_var2) = error_label;
 
-            struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
-                .span_label(ty1.span,
-                            format!("these references must have the same lifetime"))
-                .span_label(ty2.span, format!(""))
-                .span_label(span,
-                            format!("data {} flows {} here", span_label_var1, span_label_var2))
-                .emit();
-            return true;
-        } else {
-            return false;
-        }
- }
-
-    fn try_report_struct_anon_anon_conflict(&self,
-                                            ty1: &hir::Ty,
-                                            ty2: &hir::Ty,
-                                            is_arg1_struct: bool,
-                                            is_arg2_struct: bool,
-                                            span: Span,
-                                            sup: Region<'tcx>,
-                                            sub: Region<'tcx>)
-                                            -> bool {
-        let arg1_label = {
-            if is_arg1_struct && is_arg2_struct {
-                format!("these two structs are declared with different lifetimes...")
-            } else if is_arg1_struct && !is_arg2_struct {
-                format!("the struct and reference are declared with different lifetimes")
-            } else {
-                format!("the reference and struct are declared with different lifetimes")
-            }
-        };
-        if let Some(label) = self.process_anon_anon_error(sup, sub) {
-            let (label1, label2) = label;
-            struct_span_err!(self.tcx.sess, span, E0624, "lifetime mismatch")
-                .span_label(ty1.span, format!("{}", arg1_label))
-                .span_label(ty2.span, format!(""))
-                .span_label(span, format!("data {} flows {} here", label1, label2))
-                .emit();
-        } else {
-            return false;
-        }
-        true
-
-    }
-
-  fn process_anon_anon_error(&self,sup: Region<'tcx>, sub: Region<'tcx> )->Option<(String,String)>{
-
-  if let (Some(sup_arg), Some(sub_arg)) =
+        let (label1, label2) = if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
-            let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg,
- sub_arg);
-  let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
-                format!("from `{}`", simple_name)
+            let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
+            let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
+                format!(" from `{}`", simple_name)
             } else {
                 format!("")
             };
 
             let span_label_var2 = if let Some(simple_name) = anon_arg2.pat.simple_name() {
-                format!("into `{}`", simple_name)
+                format!(" into `{}`", simple_name)
             } else {
                 format!("")
             };
 
-            Some((span_label_var1, span_label_var2))
+            (span_label_var1, span_label_var2)
         } else {
-            None
+            return false;
+        };
+
+        if let Some(error_label) = self.process_anon_anon_error(first_is_struct, second_is_struct) {
+
+            struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
+                .span_label(ty1.span,
+                            format!("{} are declared with different lifetimes...", error_label))
+                .span_label(ty2.span, format!(""))
+                .span_label(span, format!("...but data{} flows{} here", label1, label2))
+                .emit();
+            return true;
+        } else {
+            return false;
         }
+    }
+
+    fn process_anon_anon_error(&self,
+                               is_arg1_struct: bool,
+                               is_arg2_struct: bool)
+                               -> Option<(String)> {
+        let arg1_label = {
+            if is_arg1_struct && is_arg2_struct {
+                format!("these two structs")
+            } else if is_arg1_struct && !is_arg2_struct {
+                format!("the struct and reference")
+            } else if !is_arg1_struct && is_arg2_struct {
+                format!("the reference")
+            } else {
+                format!("these two references")
+
+            }
+
+
+
+        };
+        Some(arg1_label)
     }
 }
