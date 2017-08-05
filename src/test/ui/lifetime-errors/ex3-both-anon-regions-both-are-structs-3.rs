@@ -7,9 +7,13 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-
-fn foo((v, w): (&u8, &u8), (x, y): (&u8, &u8)) {
-    v = x;
+struct Ref<'a, 'b> {
+    a: &'a u32,
+    b: &'b u32,
 }
 
-fn main() { }
+fn foo<'x1, 'x2, 'y1>(mut x: Ref<'x1, 'x2>, y: Ref<'y1, 'y2>) {
+    x.b = y.b;
+}
+
+fn main() {}

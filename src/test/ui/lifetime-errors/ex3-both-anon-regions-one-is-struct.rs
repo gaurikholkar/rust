@@ -8,9 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-fn foo(z: &mut Vec<(&u8,&u8)>, (x, y): (&u8, &u8)) {
-    z.push((x,y));
+struct Ref<'a, 'b> {
+    a: &'a u32,
+    b: &'b u32,
 }
 
-fn main() { }
+fn foo(mut x: Ref, y: &u32) {
+    x.b = y;
+}
 
+fn main() {}

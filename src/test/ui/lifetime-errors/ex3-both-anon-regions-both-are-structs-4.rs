@@ -7,10 +7,13 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-
-fn foo(z: &mut Vec<(&u8,&u8)>, (x, y): (&u8, &u8)) {
-    z.push((x,y));
+struct Ref<'a, 'b> {
+    a: &'a u32,
+    b: &'b u32,
 }
 
-fn main() { }
+fn foo(mut x: Ref) {
+    x.a = x.b;
+}
 
+fn main() {}
