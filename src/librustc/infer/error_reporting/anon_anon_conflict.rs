@@ -92,8 +92,8 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             return false;
         };
 
-        if let Some(error_label) = self.process_anon_anon_conflict(first_is_struct, second_is_struct) {
-
+        if let Some(error_label) =
+            self.process_anon_anon_conflict(first_is_struct, second_is_struct) {
             struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
                 .span_label(ty1.span,
                             format!("{} are declared with different lifetimes...", error_label))
@@ -110,9 +110,9 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // span labels for the different combinations of the two parameters which can be
     // either references or structs.
     fn process_anon_anon_conflict(&self,
-                               is_arg1_struct: bool,
-                               is_arg2_struct: bool)
-                               -> Option<(String)> {
+                                  is_arg1_struct: bool,
+                                  is_arg2_struct: bool)
+                                  -> Option<(String)> {
         let arg1_label = {
             if is_arg1_struct && is_arg2_struct {
                 format!("these structs")
