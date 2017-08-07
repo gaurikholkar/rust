@@ -1,8 +1,12 @@
-error[E0261]: use of undeclared lifetime name `'y2`
-  --> $DIR/ex3-both-anon-regions-both-are-structs-3.rs:15:57
+error[E0623]: lifetime mismatch
+  --> $DIR/ex3-both-anon-regions-both-are-structs-3.rs:16:11
    |
-15 | fn foo<'x1, 'x2, 'y1>(mut x: Ref<'x1, 'x2>, y: Ref<'y1, 'y2>) {
-   |                                                         ^^^ undeclared lifetime
+15 | fn foo(mut x: Ref) {
+   |               ---
+   |               |
+   |               these two types are declared with different lifetimes...
+16 |     x.a = x.b;
+   |           ^^^ ...but data with one lifetime flows into the other here
 
 error: aborting due to previous error
 

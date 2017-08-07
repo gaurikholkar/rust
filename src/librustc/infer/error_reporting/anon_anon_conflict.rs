@@ -47,18 +47,15 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         };
 
         // Determine whether the sub and sup consist of both anonymous (elided) regions.
-        let (ty1, ty2, first_is_struct, second_is_struct) = if
-            self.is_suitable_anonymous_region(sup).is_some() &&
-            self.is_suitable_anonymous_region(sub).is_some() {
+        let (ty1, ty2) = if self.is_suitable_anonymous_region(sup).is_some() &&
+                            self.is_suitable_anonymous_region(sub).is_some() {
             if let (Some(anon_reg1), Some(anon_reg2)) =
                 (self.is_suitable_anonymous_region(sup), self.is_suitable_anonymous_region(sub)) {
                 let ((_, br1), (_, br2)) = (anon_reg1, anon_reg2);
                 let found_arg1 = self.find_anon_type(sup, &br1);
                 let found_arg2 = self.find_anon_type(sub, &br2);
                 match (found_arg1, found_arg2) {
-                    (Some((anonarg_1, is_struct1)), Some((anonarg_2, is_struct2))) => {
-                        (anonarg_1, anonarg_2, is_struct1, is_struct2)
-                    }
+                    (Some(anonarg_1), Some(anonarg_2)) => (anonarg_1, anonarg_2),
                     _ => {
                         return false;
                     }
@@ -75,56 +72,35 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
             let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
-            let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
-                format!(" from `{}`", simple_name)
+            if anon_arg1 == anon_arg2 {
+                (format!(" with one lifetime"), format!(" into the other"))
             } else {
-                format!("")
-            };
+                let span_label_var1 = if let Some(simple_name) = anon_arg1.pat.simple_name() {
+                    format!(" from `{}`", simple_name)
+                } else {
+                    format!("")
+                };
 
-            let span_label_var2 = if let Some(simple_name) = anon_arg2.pat.simple_name() {
-                format!(" into `{}`", simple_name)
-            } else {
-                format!("")
-            };
+                let span_label_var2 = if let Some(simple_name) = anon_arg2.pat.simple_name() {
+                    format!(" into `{}`", simple_name)
+                } else {
+                    format!("")
+                };
 
-            (span_label_var1, span_label_var2)
-        } else {
-            return false;
-        };
-
-        if let Some(error_label) =
-            self.process_anon_anon_conflict(first_is_struct, second_is_struct) {
-            struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
-                .span_label(ty1.span,
-                            format!("{} are declared with different lifetimes...", error_label))
-                .span_label(ty2.span, format!(""))
-                .span_label(span, format!("...but data{} flows{} here", label1, label2))
-                .emit();
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    // try to pre-process the errors, for the purpose of generating different
-    // span labels for the different combinations of the two parameters which can be
-    // either references or structs.
-    fn process_anon_anon_conflict(&self,
-                                  is_arg1_struct: bool,
-                                  is_arg2_struct: bool)
-                                  -> Option<(String)> {
-        let arg1_label = {
-            if is_arg1_struct && is_arg2_struct {
-                format!("these structs")
-            } else if is_arg1_struct && !is_arg2_struct {
-                format!("the struct and reference")
-            } else if !is_arg1_struct && is_arg2_struct {
-                format!("the reference and the struct")
-            } else {
-                format!("these references")
+                (span_label_var1, span_label_var2)
             }
+        } else {
+            return false;
         };
-        Some(arg1_label)
+
+        struct_span_err!(self.tcx.sess, span, E0623, "lifetime mismatch")
+            .span_label(ty1.span,
+                        format!("these two types are declared with different lifetimes..."))
+            .span_label(ty2.span, format!(""))
+            .span_label(span, format!("...but data{} flows{} here", label1, label2))
+            .emit();
+        return true;
+
     }
 
     /// This function calls the `visit_ty` method for the parameters
@@ -143,10 +119,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     /// ```
     /// The function returns the nested type corresponding to the anonymous region
     /// for e.g. `&u8` and Vec<`&u8`.
-    pub fn find_anon_type(&self,
-                          region: Region<'tcx>,
-                          br: &ty::BoundRegion)
-                          -> Option<(&hir::Ty, bool)> {
+    pub fn find_anon_type(&self, region: Region<'tcx>, br: &ty::BoundRegion) -> Option<(&hir::Ty)> {
         if let Some(anon_reg) = self.is_suitable_anonymous_region(region) {
             let (def_id, _) = anon_reg;
             if let Some(node_id) = self.tcx.hir.as_local_node_id(def_id) {
@@ -163,12 +136,9 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                     hir_map: &self.tcx.hir,
                                     bound_region: *br,
                                     found_type: None,
-                                    is_struct: false,
                                 };
                                 nested_visitor.visit_ty(&**arg);
-                                nested_visitor
-                                    .found_type
-                                    .map(|found_type| (found_type, nested_visitor.is_struct))
+                                nested_visitor.found_type.map(|found_type| (found_type))
                             })
                                        .next();
                         }
@@ -196,8 +166,6 @@ struct FindNestedTypeVisitor<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
     // The type where the anonymous lifetime appears
     // for e.g. Vec<`&u8`> and <`&u8`>
     found_type: Option<&'gcx hir::Ty>,
-    // Indicates if the argument corresponds to a struct.
-    is_struct: bool,
 }
 
 impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
@@ -244,13 +212,13 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for FindNestedTypeVisitor<'a, 'gcx, 'tcx> {
                 intravisit::walk_ty(subvisitor, arg); // call walk_ty; as visit_ty is empty,
                 // this will visit only outermost type
                 if subvisitor.found_it {
-                    self.is_struct = true;
                     self.found_type = Some(arg);
-                } else {
                 }
             }
             _ => {}
         }
+        // walk the embedded contents: e.g., if we are visiting `Vec<&Foo>`,
+        // go on to visit `&Foo`
         intravisit::walk_ty(self, arg);
     }
 }

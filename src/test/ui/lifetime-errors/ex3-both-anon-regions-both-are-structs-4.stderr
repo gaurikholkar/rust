@@ -4,9 +4,9 @@ error[E0623]: lifetime mismatch
 15 | fn foo(mut x: Ref) {
    |               ---
    |               |
-   |               these structs are declared with different lifetimes...
+   |               these two types are declared with different lifetimes...
 16 |     x.a = x.b;
-   |           ^^^ ...but data from `x` flows into `x` here
+   |           ^^^ ...but data with one lifetime flows into the other here
 
 error: aborting due to previous error
 

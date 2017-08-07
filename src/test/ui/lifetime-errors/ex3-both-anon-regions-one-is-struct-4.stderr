@@ -2,7 +2,7 @@ error[E0623]: lifetime mismatch
   --> $DIR/ex3-both-anon-regions-one-is-struct-4.rs:14:11
    |
 13 | fn foo(mut y: Ref, x: &u32) {
-   |               ---     ---- the reference and the struct are declared with different lifetimes...
+   |               ---     ---- these two types are declared with different lifetimes...
 14 |     y.b = x;
    |           ^ ...but data from `x` flows into `y` here
 

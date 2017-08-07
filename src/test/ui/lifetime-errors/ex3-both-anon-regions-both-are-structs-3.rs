@@ -12,8 +12,8 @@ struct Ref<'a, 'b> {
     b: &'b u32,
 }
 
-fn foo<'x1, 'x2, 'y1>(mut x: Ref<'x1, 'x2>, y: Ref<'y1, 'y2>) {
-    x.b = y.b;
+fn foo(mut x: Ref) {
+    x.a = x.b;
 }
 
 fn main() {}
