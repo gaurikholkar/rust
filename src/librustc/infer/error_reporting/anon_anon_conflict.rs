@@ -47,15 +47,15 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         };
 
         // Determine whether the sub and sup consist of both anonymous (elided) regions.
-        let (ty1, ty2) = if self.is_suitable_anonymous_region(sup).is_some() &&
+        let (ty1, ty2, scope_def_id_1, scope_def_id_2, bregion1, bregion2) = if self.is_suitable_anonymous_region(sup).is_some() &&
                             self.is_suitable_anonymous_region(sub).is_some() {
             if let (Some(anon_reg1), Some(anon_reg2)) =
                 (self.is_suitable_anonymous_region(sup), self.is_suitable_anonymous_region(sub)) {
-                let ((_, br1), (_, br2)) = (anon_reg1, anon_reg2);
+                let ((def_id1, br1), (def_id2, br2)) = (anon_reg1, anon_reg2);
                 let found_arg1 = self.find_anon_type(sup, &br1);
                 let found_arg2 = self.find_anon_type(sub, &br2);
                 match (found_arg1, found_arg2) {
-                    (Some(anonarg_1), Some(anonarg_2)) => (anonarg_1, anonarg_2),
+                    (Some(anonarg_1), Some(anonarg_2)) => (anonarg_1, anonarg_2, def_id1, def_id2, br1,br2),
                     _ => {
                         return false;
                     }
@@ -71,7 +71,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         let (label1, label2) = if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
-            let ((anon_arg1, _, _, _), (anon_arg2, _, _, _)) = (sup_arg, sub_arg);
+        
+            let ((anon_arg1, _, _, is_first1), (anon_arg2, _, _, is_first2)) = (sup_arg, sub_arg);
+            if self.is_return_type_anon(scope_def_id_1,bregion1) || self.is_self_anon(is_first1,scope_def_id_1)||
+            self.is_return_type_anon(scope_def_id_2,bregion2) || self.is_self_anon(is_first2,scope_def_id_2){
+                return false;
+            }
+            
             if anon_arg1 == anon_arg2 {
                 (format!(" with one lifetime"), format!(" into the other"))
             } else {

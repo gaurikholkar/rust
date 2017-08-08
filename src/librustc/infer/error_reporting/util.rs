@@ -117,4 +117,40 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             }
             None
         }
+
+   // Here, we check for the case where the anonymous region
+   // is in the return type.
+   // FIXME(#42703) - Need to handle certain cases here.
+   pub fn is_return_type_anon( &self, scope_def_id:DefId, br: ty::BoundRegion)->bool{
+       let ret_ty = self.tcx.type_of(scope_def_id);
+        match ret_ty.sty {
+            ty::TyFnDef(_, _) => {
+                let sig = ret_ty.fn_sig(self.tcx);
+                let late_bound_regions = self.tcx
+                    .collect_referenced_late_bound_regions(&sig.output());
+                if late_bound_regions.iter().any(|r| *r == br) {
+                    debug!("return type is anon");
+                    return true;
+                }
+            }
+            _ => {  }
+        }
+        false
+   }     
+   // Here we check for the case where anonymous region
+        // corresponds to self and if yes, we display E0312.
+        // FIXME(#42700) - Need to format self properly to
+        // enable E0621 for it.
+   pub fn is_self_anon(&self, is_first: bool, scope_def_id: DefId)->bool{
+        if is_first &&
+           self.tcx
+               .opt_associated_item(scope_def_id)
+               .map(|i| i.method_has_self_argument)
+               .unwrap_or(false) {
+                   debug!("self is anon");
+            return true
+        }
+        false
+   }
+   
 }
