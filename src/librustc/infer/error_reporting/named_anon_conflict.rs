@@ -44,7 +44,6 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             };
 
         if self.is_return_type_anon(scope_def_id,br) || self.is_self_anon(is_first,scope_def_id){
-            debug!("{} = ret ty and self = {}",self.is_return_type_anon(scope_def_id,br),
             self.is_self_anon(is_first,scope_def_id));
             return false;
         }else{

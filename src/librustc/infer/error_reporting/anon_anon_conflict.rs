@@ -40,22 +40,27 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // }
     // It will later be extended to trait objects.
     pub fn try_report_anon_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
-
         let (span, sub, sup) = match *error {
             ConcreteFailure(ref origin, sub, sup) => (origin.span(), sub, sup),
             _ => return false, // inapplicable
         };
 
         // Determine whether the sub and sup consist of both anonymous (elided) regions.
-        let (ty1, ty2, scope_def_id_1, scope_def_id_2, bregion1, bregion2) = if self.is_suitable_anonymous_region(sup).is_some() &&
-                            self.is_suitable_anonymous_region(sub).is_some() {
+        let (ty1, ty2, scope_def_id_1, scope_def_id_2, bregion1, bregion2) = if
+            self.is_suitable_anonymous_region_for_anon_anon(sup)
+                .is_some() &&
+            self.is_suitable_anonymous_region_for_anon_anon(sub)
+                .is_some() {
             if let (Some(anon_reg1), Some(anon_reg2)) =
-                (self.is_suitable_anonymous_region(sup), self.is_suitable_anonymous_region(sub)) {
+                (self.is_suitable_anonymous_region_for_anon_anon(sup),
+                 self.is_suitable_anonymous_region_for_anon_anon(sub)) {
                 let ((def_id1, br1), (def_id2, br2)) = (anon_reg1, anon_reg2);
                 let found_arg1 = self.find_anon_type(sup, &br1);
                 let found_arg2 = self.find_anon_type(sub, &br2);
                 match (found_arg1, found_arg2) {
-                    (Some(anonarg_1), Some(anonarg_2)) => (anonarg_1, anonarg_2, def_id1, def_id2, br1,br2),
+                    (Some(anonarg_1), Some(anonarg_2)) => {
+                        (anonarg_1, anonarg_2, def_id1, def_id2, br1, br2)
+                    }
                     _ => {
                         return false;
                     }
@@ -71,13 +76,21 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
         let (label1, label2) = if let (Some(sup_arg), Some(sub_arg)) =
             (self.find_arg_with_anonymous_region(sup, sup),
              self.find_arg_with_anonymous_region(sub, sub)) {
-        
+
             let ((anon_arg1, _, _, is_first1), (anon_arg2, _, _, is_first2)) = (sup_arg, sub_arg);
-            if self.is_return_type_anon(scope_def_id_1,bregion1) || self.is_self_anon(is_first1,scope_def_id_1)||
-            self.is_return_type_anon(scope_def_id_2,bregion2) || self.is_self_anon(is_first2,scope_def_id_2){
+            if self.is_self_anon(is_first1, scope_def_id_1) ||
+               self.is_self_anon(is_first2, scope_def_id_2) {
                 return false;
             }
-            
+
+            if self.is_return_type_anon(scope_def_id_1, bregion1) ||
+               self.is_return_type_anon(scope_def_id_2, bregion2) {
+                return false;
+            }
+
+
+
+
             if anon_arg1 == anon_arg2 {
                 (format!(" with one lifetime"), format!(" into the other"))
             } else {
@@ -126,7 +139,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     /// The function returns the nested type corresponding to the anonymous region
     /// for e.g. `&u8` and Vec<`&u8`.
     pub fn find_anon_type(&self, region: Region<'tcx>, br: &ty::BoundRegion) -> Option<(&hir::Ty)> {
-        if let Some(anon_reg) = self.is_suitable_anonymous_region(region) {
+        if let Some(anon_reg) = self.is_suitable_anonymous_region_for_anon_anon(region) {
             let (def_id, _) = anon_reg;
             if let Some(node_id) = self.tcx.hir.as_local_node_id(def_id) {
                 let ret_ty = self.tcx.type_of(def_id);
@@ -144,7 +157,43 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                     found_type: None,
                                 };
                                 nested_visitor.visit_ty(&**arg);
-                                nested_visitor.found_type.map(|found_type| (found_type))
+                                nested_visitor.found_type
+                            })
+                                       .next();
+                        }
+                    } else if let hir_map::NodeTraitItem(it) = self.tcx.hir.get(node_id) {
+                        if let hir::TraitItemKind::Method(ref fndecl, _) = it.node {
+                            return fndecl
+                                       .decl
+                                       .inputs
+                                       .iter()
+                                       .filter_map(|arg| {
+                                let mut nested_visitor = FindNestedTypeVisitor {
+                                    infcx: &self,
+                                    hir_map: &self.tcx.hir,
+                                    bound_region: *br,
+                                    found_type: None,
+                                };
+                                nested_visitor.visit_ty(&**arg);
+                                nested_visitor.found_type
+                            })
+                                       .next();
+                        }
+                    } else if let hir_map::NodeImplItem(it) = self.tcx.hir.get(node_id) {
+                        if let hir::ImplItemKind::Method(ref fndecl, _) = it.node {
+                            return fndecl
+                                       .decl
+                                       .inputs
+                                       .iter()
+                                       .filter_map(|arg| {
+                                let mut nested_visitor = FindNestedTypeVisitor {
+                                    infcx: &self,
+                                    hir_map: &self.tcx.hir,
+                                    bound_region: *br,
+                                    found_type: None,
+                                };
+                                nested_visitor.visit_ty(&**arg);
+                                nested_visitor.found_type
                             })
                                        .next();
                         }

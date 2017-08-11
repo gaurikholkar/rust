@@ -83,74 +83,98 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                                         region: Region<'tcx>)
                                         -> Option<(DefId, ty::BoundRegion)> {
         if let ty::ReFree(ref free_region) = *region {
-            if let ty::BrAnon(..) = free_region.bound_region{
-                    let anonymous_region_binding_scope = free_region.scope;
-                    let node_id = self.tcx
-                        .hir
-                        .as_local_node_id(anonymous_region_binding_scope)
-                        .unwrap();
-                    match self.tcx.hir.find(node_id) {
-                        Some(hir_map::NodeItem(..)) |
-                        Some(hir_map::NodeTraitItem(..)) => {
-                            // Success -- proceed to return Some below
-                        }
-                        Some(hir_map::NodeImplItem(..)) => {
-                            let container_id = self.tcx
-                                .associated_item(anonymous_region_binding_scope)
-                                .container
-                                .id();
-                            if self.tcx.impl_trait_ref(container_id).is_some() {
-                                // For now, we do not try to target impls of traits. This is
-                                // because this message is going to suggest that the user
-                                // change the fn signature, but they may not be free to do so,
-                                // since the signature must match the trait.
-                                //
-                                // FIXME(#42706) -- in some cases, we could do better here.
-                                return None;
-                            }
-                        }
-                        _ => return None, // inapplicable
-                        // we target only top-level functions
+            if let ty::BrAnon(..) = free_region.bound_region {
+                let anonymous_region_binding_scope = free_region.scope;
+                let node_id = self.tcx
+                    .hir
+                    .as_local_node_id(anonymous_region_binding_scope)
+                    .unwrap();
+                match self.tcx.hir.find(node_id) {
+                    Some(hir_map::NodeItem(..)) |
+                    Some(hir_map::NodeTraitItem(..)) => {
+                        // Success -- proceed to return Some below
                     }
-                    return Some((anonymous_region_binding_scope, free_region.bound_region));
+                    Some(hir_map::NodeImplItem(..)) => {
+                        let container_id = self.tcx
+                            .associated_item(anonymous_region_binding_scope)
+                            .container
+                            .id();
+                        if self.tcx.impl_trait_ref(container_id).is_some() {
+                            // For now, we do not try to target impls of traits. This is
+                            // because this message is going to suggest that the user
+                            // change the fn signature, but they may not be free to do so,
+                            // since the signature must match the trait.
+                            //
+                            // FIXME(#42706) -- in some cases, we could do better here.
+                        }
+                    }
+                    _ => return None, // inapplicable
+                    // we target only top-level functions
                 }
+                return Some((anonymous_region_binding_scope, free_region.bound_region));
             }
-            None
         }
+        None
+    }
 
-   // Here, we check for the case where the anonymous region
-   // is in the return type.
-   // FIXME(#42703) - Need to handle certain cases here.
-   pub fn is_return_type_anon( &self, scope_def_id:DefId, br: ty::BoundRegion)->bool{
-       let ret_ty = self.tcx.type_of(scope_def_id);
+    // Here, we check for the case where the anonymous region
+    // is in the return type.
+    // FIXME(#42703) - Need to handle certain cases here.
+    pub fn is_return_type_anon(&self, scope_def_id: DefId, br: ty::BoundRegion) -> bool {
+        let ret_ty = self.tcx.type_of(scope_def_id);
         match ret_ty.sty {
             ty::TyFnDef(_, _) => {
                 let sig = ret_ty.fn_sig(self.tcx);
                 let late_bound_regions = self.tcx
                     .collect_referenced_late_bound_regions(&sig.output());
                 if late_bound_regions.iter().any(|r| *r == br) {
-                    debug!("return type is anon");
                     return true;
                 }
             }
-            _ => {  }
+            _ => {}
         }
         false
-   }     
-   // Here we check for the case where anonymous region
-        // corresponds to self and if yes, we display E0312.
-        // FIXME(#42700) - Need to format self properly to
-        // enable E0621 for it.
-   pub fn is_self_anon(&self, is_first: bool, scope_def_id: DefId)->bool{
+    }
+    // Here we check for the case where anonymous region
+    // corresponds to self and if yes, we display E0312.
+    // FIXME(#42700) - Need to format self properly to
+    // enable E0621 for it.
+    pub fn is_self_anon(&self, is_first: bool, scope_def_id: DefId) -> bool {
         if is_first &&
            self.tcx
                .opt_associated_item(scope_def_id)
                .map(|i| i.method_has_self_argument)
                .unwrap_or(false) {
-                   debug!("self is anon");
-            return true
+            return true;
         }
         false
-   }
-   
+    }
+
+    // This method returns whether the given Region is Anonymous
+    // and returns the DefId and the BoundRegion corresponding to the given region.
+    pub fn is_suitable_anonymous_region_for_anon_anon(&self,
+                                                      region: Region<'tcx>)
+                                                      -> Option<(DefId, ty::BoundRegion)> {
+        if let ty::ReFree(ref free_region) = *region {
+            if let ty::BrAnon(..) = free_region.bound_region {
+                let anonymous_region_binding_scope = free_region.scope;
+                let node_id = self.tcx
+                    .hir
+                    .as_local_node_id(anonymous_region_binding_scope)
+                    .unwrap();
+                match self.tcx.hir.find(node_id) {
+                    Some(hir_map::NodeItem(..)) |
+                    Some(hir_map::NodeTraitItem(..)) => {}
+                    Some(hir_map::NodeImplItem(..)) => {
+                        // Success -- proceed to return Some below
+                    }
+
+                    _ => return None, // inapplicable
+                    // we target only top-level functions
+                }
+                return Some((anonymous_region_binding_scope, free_region.bound_region));
+            }
+        }
+        None
+    }
 }
