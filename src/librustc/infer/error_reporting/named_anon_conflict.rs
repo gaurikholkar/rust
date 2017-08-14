@@ -19,6 +19,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // the function arguments consist of a named region and an anonymous
     // region and corresponds to `ConcreteFailure(..)`
     pub fn try_report_named_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
+        debug!("try_report_named_anon_conflict");
         let (span, sub, sup) = match *error {
             ConcreteFailure(ref origin, sub, sup) => (origin.span(), sub, sup),
             _ => return false, // inapplicable
