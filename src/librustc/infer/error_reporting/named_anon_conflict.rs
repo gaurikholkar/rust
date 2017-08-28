@@ -18,10 +18,11 @@ use ty;
 impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
     // This method generates the error message for the case when
     // the function arguments consist of a named region and an anonymous
-    // region and corresponds to `ConcreteFailure(..)`
+    // region and corresponds to `ConcreteFailure(..)` or `SubSupConflict(..)`
     pub fn try_report_named_anon_conflict(&self, error: &RegionResolutionError<'tcx>) -> bool {
         let (span, sub, sup) = match *error {
             ConcreteFailure(ref origin, sub, sup) => (origin.span(), sub, sup),
+            SubSupConflict(_, ref origin, sub, _, sup) => (origin.span(), sub, sup),
             _ => return false, // inapplicable
         };
 
