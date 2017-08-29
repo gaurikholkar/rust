@@ -1,1 +1,41 @@
-TESTING1
+error[E0495]: cannot infer an appropriate lifetime for borrow expression due to conflicting requirements
+  --> $DIR/one_named_and_one_anonymous.rs:17:13
+   |
+17 |             &self.field
+   |             ^^^^^^^^^^^
+   |
+note: first, the lifetime cannot outlive the anonymous lifetime #1 defined on the method body at 15:5...
+  --> $DIR/one_named_and_one_anonymous.rs:15:5
+   |
+15 | /     fn foo2<'a>(&self, x: &'a i32) -> &'a i32 {
+16 | |         if true {
+17 | |             &self.field
+18 | |         } else {
+19 | |             x
+20 | |         }
+21 | |     }
+   | |_____^
+note: ...so that reference does not outlive borrowed content
+  --> $DIR/one_named_and_one_anonymous.rs:17:13
+   |
+17 |             &self.field
+   |             ^^^^^^^^^^^
+note: but, the lifetime must be valid for the lifetime 'a as defined on the method body at 15:5...
+  --> $DIR/one_named_and_one_anonymous.rs:15:5
+   |
+15 | /     fn foo2<'a>(&self, x: &'a i32) -> &'a i32 {
+16 | |         if true {
+17 | |             &self.field
+18 | |         } else {
+19 | |             x
+20 | |         }
+21 | |     }
+   | |_____^
+note: ...so that reference does not outlive borrowed content
+  --> $DIR/one_named_and_one_anonymous.rs:17:13
+   |
+17 |             &self.field
+   |             ^^^^^^^^^^^
+
+error: aborting due to previous error
+
