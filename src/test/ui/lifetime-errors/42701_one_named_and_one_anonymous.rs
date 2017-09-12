@@ -9,15 +9,15 @@
 // except according to those terms.
 
 struct Foo {
-    field: i32,
+    field: i32, 
 }
-impl Foo {
-    fn foo2<'a>(&self, x: &'a i32) -> &'a i32 {
-        if true {
-            &self.field
-        } else {
-            x
-        }
+
+fn foo2<'a>(a: &'a Foo, x: &i32) -> &'a i32 {
+    if true {
+        let p: &i32 = &a.field;
+        &*p
+    } else {
+        &*x
     }
 }
 
