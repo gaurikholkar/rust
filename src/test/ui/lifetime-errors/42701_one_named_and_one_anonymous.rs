@@ -9,7 +9,7 @@
 // except according to those terms.
 
 struct Foo {
-    field: i32, 
+    field: i32,
 }
 
 fn foo2<'a>(a: &'a Foo, x: &i32) -> &'a i32 {
