@@ -48,7 +48,7 @@ fn baz<'a,'b>(x: Type<'a>, y: Type<'b>) -> (Type<'a>, Type<'b>) {
    let a = bar(f, x);
    let b = bar(f, y);
    (a, b)
-   //[oneuse]~^ ERROR 50:8: 50:9: lifetime mismatch [E0623]
+   //[oneuse]~^ ERROR 50:5: 50:6: lifetime mismatch [E0623]
 }
 
 #[cfg(transmute)] // one instantiations: BAD
