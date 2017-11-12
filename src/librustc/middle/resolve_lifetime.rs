@@ -947,7 +947,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         });
     }
 
-    fn resolve_lifetime_ref(&mut self, lifetime_ref: &hir::Lifetime) {
+    fn resolve_lifetime_ref(&mut self, lifetime_ref: &'tcx hir::Lifetime) {
         // Walk up the scope chain, tracking the number of fn scopes
         // that we pass through, until we find a lifetime with the
         // given name or we run out of scopes.
@@ -1367,7 +1367,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
 
     }
 
-    fn resolve_elided_lifetimes(&mut self, lifetime_refs: &[hir::Lifetime]) {
+    fn resolve_elided_lifetimes(&mut self, lifetime_refs: &'tcx [hir::Lifetime]) {
         if lifetime_refs.is_empty() {
             return;
         }
@@ -1506,7 +1506,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         }
     }
 
-    fn resolve_object_lifetime_default(&mut self, lifetime_ref: &hir::Lifetime) {
+    fn resolve_object_lifetime_default(&mut self, lifetime_ref: &'tcx hir::Lifetime) {
         let mut late_depth = 0;
         let mut scope = self.scope;
         let lifetime = loop {
@@ -1528,7 +1528,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         self.insert_lifetime(lifetime_ref, lifetime.shifted(late_depth));
     }
 
-    fn check_lifetime_defs(&mut self, old_scope: ScopeRef, lifetimes: &[hir::LifetimeDef]) {
+    fn check_lifetime_defs(&mut self, old_scope: ScopeRef, lifetimes: &'tcx [hir::LifetimeDef]) {
         for i in 0..lifetimes.len() {
             let lifetime_i = &lifetimes[i];
 
@@ -1601,7 +1601,9 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         }
     }
 
-    fn check_lifetime_def_for_shadowing(&self, mut old_scope: ScopeRef, lifetime: &hir::Lifetime) {
+    fn check_lifetime_def_for_shadowing(&self,
+                                        mut old_scope: ScopeRef,
+                                        lifetime: &'tcx hir::Lifetime) {
         for &(label, label_span) in &self.labels_in_fn {
             // FIXME (#24278): non-hygienic comparison
             if lifetime.name.name() == label {
@@ -1642,7 +1644,7 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         }
     }
 
-    fn insert_lifetime(&mut self, lifetime_ref: &hir::Lifetime, def: Region) {
+    fn insert_lifetime(&mut self, lifetime_ref: &'tcx hir::Lifetime, def: Region) {
         if lifetime_ref.id == ast::DUMMY_NODE_ID {
             span_bug!(lifetime_ref.span,
                       "lifetime reference not renumbered, \

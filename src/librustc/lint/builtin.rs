@@ -107,6 +107,12 @@ declare_lint! {
 }
 
 declare_lint! {
+    pub FAT_PTR_TRANSMUTES,
+    Allow,
+    "detects transmutes of fat pointers"
+}
+
+declare_lint! {
     pub TRIVIAL_CASTS,
     Allow,
     "detects trivial casts which could be removed"
@@ -217,9 +223,9 @@ declare_lint! {
 }
 
 declare_lint! {
-    pub UNUSED_MUT,
-    Warn,
-    "detect mut variables which don't need to be mutable"
+    pub SINGLE_USE_LIFETIME,
+    Allow,
+    "lifetime name used only once"
 }
 
 /// Does nothing as a lint pass, but registers some `Lint`s
@@ -229,42 +235,41 @@ pub struct HardwiredLints;
 
 impl LintPass for HardwiredLints {
     fn get_lints(&self) -> LintArray {
-        lint_array!(
-            UNUSED_IMPORTS,
-            UNUSED_EXTERN_CRATES,
-            UNUSED_QUALIFICATIONS,
-            UNKNOWN_LINTS,
-            UNUSED_VARIABLES,
-            UNUSED_ASSIGNMENTS,
-            DEAD_CODE,
-            UNREACHABLE_CODE,
-            UNREACHABLE_PATTERNS,
-            UNUSED_MACROS,
-            WARNINGS,
-            UNUSED_FEATURES,
-            STABLE_FEATURES,
-            UNKNOWN_CRATE_TYPES,
-            TRIVIAL_CASTS,
-            TRIVIAL_NUMERIC_CASTS,
-            PRIVATE_IN_PUBLIC,
-            PUB_USE_OF_PRIVATE_EXTERN_CRATE,
-            INVALID_TYPE_PARAM_DEFAULT,
-            CONST_ERR,
-            RENAMED_AND_REMOVED_LINTS,
-            RESOLVE_TRAIT_ON_DEFAULTED_UNIT,
-            SAFE_EXTERN_STATICS,
-            PATTERNS_IN_FNS_WITHOUT_BODY,
-            EXTRA_REQUIREMENT_IN_IMPL,
-            LEGACY_DIRECTORY_OWNERSHIP,
-            LEGACY_IMPORTS,
-            LEGACY_CONSTRUCTOR_VISIBILITY,
-            MISSING_FRAGMENT_SPECIFIER,
-            PARENTHESIZED_PARAMS_IN_TYPES_AND_MODULES,
-            LATE_BOUND_LIFETIME_ARGUMENTS,
-            DEPRECATED,
-            UNUSED_UNSAFE,
-            UNUSED_MUT
-        )
+        lint_array!(UNUSED_IMPORTS,
+                    UNUSED_EXTERN_CRATES,
+                    UNUSED_QUALIFICATIONS,
+                    UNKNOWN_LINTS,
+                    UNUSED_VARIABLES,
+                    UNUSED_ASSIGNMENTS,
+                    DEAD_CODE,
+                    UNREACHABLE_CODE,
+                    UNREACHABLE_PATTERNS,
+                    UNUSED_MACROS,
+                    WARNINGS,
+                    UNUSED_FEATURES,
+                    STABLE_FEATURES,
+                    UNKNOWN_CRATE_TYPES,
+                    FAT_PTR_TRANSMUTES,
+                    TRIVIAL_CASTS,
+                    TRIVIAL_NUMERIC_CASTS,
+                    PRIVATE_IN_PUBLIC,
+                    PUB_USE_OF_PRIVATE_EXTERN_CRATE,
+                    INVALID_TYPE_PARAM_DEFAULT,
+                    CONST_ERR,
+                    RENAMED_AND_REMOVED_LINTS,
+                    RESOLVE_TRAIT_ON_DEFAULTED_UNIT,
+                    SAFE_EXTERN_STATICS,
+                    PATTERNS_IN_FNS_WITHOUT_BODY,
+                    EXTRA_REQUIREMENT_IN_IMPL,
+                    LEGACY_DIRECTORY_OWNERSHIP,
+                    LEGACY_IMPORTS,
+                    LEGACY_CONSTRUCTOR_VISIBILITY,
+                    MISSING_FRAGMENT_SPECIFIER,
+                    PARENTHESIZED_PARAMS_IN_TYPES_AND_MODULES,
+                    LATE_BOUND_LIFETIME_ARGUMENTS,
+                    DEPRECATED,
+                    UNUSED_UNSAFE,
+                    SINGLE_USE_LIFETIME)
     }
 }
 
