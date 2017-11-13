@@ -293,6 +293,22 @@ pub fn krate(sess: &Session,
     Ok(map)
 }
 
+struct LifetimeSingleUseWarnVisitor<'c, 'tcx: 'c> {
+    lifetime_context: LifetimeContext<'c, 'tcx>,
+}
+
+impl<'a, 'tcx> Visitor<'tcx> for LifetimeSingleUseWarnVisitor<'a, 'tcx> {
+    fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'tcx> {
+        NestedVisitorMap::All(self.hir_map)
+    }
+
+    fn visit_lifetime_def(&mut self, lifetime_def: &hir::LifetimeDef) {
+        let def_id = self.tcx.hir.as_local_def_id(lifetime_def.id);
+
+    }
+}
+
+
 impl<'a, 'tcx> Visitor<'tcx> for LifetimeContext<'a, 'tcx> {
     fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'tcx> {
         NestedVisitorMap::All(self.hir_map)
