@@ -293,22 +293,6 @@ pub fn krate(sess: &Session,
     Ok(map)
 }
 
-struct LifetimeSingleUseWarnVisitor<'c, 'tcx: 'c> {
-    lifetime_context: LifetimeContext<'c, 'tcx>,
-}
-
-impl<'a, 'tcx> Visitor<'tcx> for LifetimeSingleUseWarnVisitor<'a, 'tcx> {
-    fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'tcx> {
-        NestedVisitorMap::All(self.hir_map)
-    }
-
-    fn visit_lifetime_def(&mut self, lifetime_def: &hir::LifetimeDef) {
-        let def_id = self.tcx.hir.as_local_def_id(lifetime_def.id);
-
-    }
-}
-
-
 impl<'a, 'tcx> Visitor<'tcx> for LifetimeContext<'a, 'tcx> {
     fn nested_visit_map<'this>(&'this mut self) -> NestedVisitorMap<'this, 'tcx> {
         NestedVisitorMap::All(self.hir_map)
@@ -898,6 +882,27 @@ impl<'a, 'tcx> LifetimeContext<'a, 'tcx> {
         debug!("exiting scope {:?}", this.scope);
         self.labels_in_fn = this.labels_in_fn;
         self.xcrate_object_lifetime_defaults = this.xcrate_object_lifetime_defaults;
+
+        for (def_id, lifetimeuseset) in &this.lifetime_uses {
+            match lifetimeuseset {
+                &LifetimeUseSet::One(_) => {
+                    let node_id = this.hir_map.as_local_node_id(*def_id).unwrap();
+                    let hir_lifetime: Option<&hir::Lifetime> = match this.hir_map.get(node_id) {
+                        hir::map::NodeLifetime(l) => Some(l),
+                        _ => {
+                            debug!("Doesn't map to a Lifetime");
+                            None
+                        }
+                    };
+                    let span = hir_lifetime.unwrap().span;
+                    debug!("span = {:?} hir_lifetime = {:?}", span, hir_lifetime);
+                }
+                _ => {
+                    debug!("Not one use lifetime");
+                }
+
+            }
+        }
     }
 
     /// Visits self by adding a scope and handling recursive walk over the contents with `walk`.
