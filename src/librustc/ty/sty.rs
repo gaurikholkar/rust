@@ -25,6 +25,7 @@ use std::cmp::Ordering;
 use syntax::abi;
 use syntax::ast::{self, Name};
 use syntax::symbol::keywords;
+use syntax_pos::{Span, DUMMY_SP};
 
 use serialize;
 
@@ -862,23 +863,24 @@ impl<'tcx> PolyFnSig<'tcx> {
 pub struct ParamTy {
     pub idx: u32,
     pub name: Name,
+    pub span: Span
 }
 
 impl<'a, 'gcx, 'tcx> ParamTy {
-    pub fn new(index: u32, name: Name) -> ParamTy {
-        ParamTy { idx: index, name: name }
+    pub fn new(index: u32, name: Name, span: Span) -> ParamTy {
+        ParamTy { idx: index, name: name, span: span }
     }
 
     pub fn for_self() -> ParamTy {
-        ParamTy::new(0, keywords::SelfType.name())
+        ParamTy::new(0, keywords::SelfType.name(), DUMMY_SP)
     }
 
     pub fn for_def(def: &ty::TypeParameterDef) -> ParamTy {
-        ParamTy::new(def.index, def.name)
+        ParamTy::new(def.index, def.name, DUMMY_SP)
     }
 
     pub fn to_ty(self, tcx: TyCtxt<'a, 'gcx, 'tcx>) -> Ty<'tcx> {
-        tcx.mk_param(self.idx, self.name)
+        tcx.mk_param(self.idx, self.name, self.span)
     }
 
     pub fn is_self(&self) -> bool {

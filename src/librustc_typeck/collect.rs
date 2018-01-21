@@ -241,7 +241,7 @@ fn type_param_predicates<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     let param_owner_def_id = tcx.hir.local_def_id(param_owner);
     let generics = tcx.generics_of(param_owner_def_id);
     let index = generics.type_param_to_index[&def_id.index];
-    let ty = tcx.mk_param(index, tcx.hir.ty_param_name(param_id));
+    let ty = tcx.mk_param(index, tcx.hir.ty_param_name(param_id), DUMMY_SP);
 
     // Don't look for bounds where the type parameter isn't in scope.
     let parent = if item_def_id == param_owner_def_id {
@@ -1477,7 +1477,7 @@ fn explicit_predicates_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     // Collect the predicates that were written inline by the user on each
     // type parameter (e.g., `<T:Foo>`).
     for param in ast_generics.ty_params() {
-        let param_ty = ty::ParamTy::new(index, param.name).to_ty(tcx);
+        let param_ty = ty::ParamTy::new(index, param.name, param.span).to_ty(tcx);
         index += 1;
 
         let bounds = compute_bounds(&icx,

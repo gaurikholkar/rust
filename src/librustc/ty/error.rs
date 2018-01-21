@@ -239,7 +239,7 @@ impl<'a, 'gcx, 'lcx, 'tcx> ty::TyS<'tcx> {
                 if p.is_self() {
                     "Self".to_string()
                 } else {
-                    "type parameter".to_string()
+                    p.to_string()
                 }
             }
             ty::TyAnon(..) => "anonymized type".to_string(),
@@ -256,13 +256,21 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         use self::TypeError::*;
 
         match err.clone() {
-            Sorts(values) => {
-                let expected_str = values.expected.sort_string(self);
-                let found_str = values.found.sort_string(self);
-                if expected_str == found_str && expected_str == "closure" {
-                    db.note("no two closures, even if identical, have the same type");
-                    db.help("consider boxing your closure and/or using it as a trait object");
-                }
+            Sorts(values)
+            => {
+                debug!("values = {:?}", values);
+                match values
+                 {
+                    (ty.sty:TypeVariants::Param(param), _) |
+                    (_, ty.sty:TypeVariants::Param(param)) => {
+                    let expected_str = values.expected.sort_string(self);
+                    let found_str = values.found.sort_string(self);
+                    if expected_str == found_str && expected_str == "closure" {
+                        db.note("no two closures, even if identical, have the same type");
+                        db.help("consider boxing your closure and/or using it as a trait object");
+                    } 
+                    },
+                    _=> {}}
             },
             TyParamDefaultMismatch(values) => {
                 let expected = values.expected;

@@ -661,7 +661,8 @@ for ty::TypeVariants<'gcx>
 
 impl_stable_hash_for!(struct ty::ParamTy {
     idx,
-    name
+    name,
+    span
 });
 
 impl_stable_hash_for!(struct ty::TypeAndMut<'tcx> {

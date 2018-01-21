@@ -72,7 +72,7 @@ use syntax::ast::{self, Name, NodeId};
 use syntax::attr;
 use syntax::codemap::MultiSpan;
 use syntax::symbol::{Symbol, keywords};
-use syntax_pos::Span;
+use syntax_pos::{Span, DUMMY_SP};
 
 use hir;
 
@@ -2095,18 +2095,20 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         self.mk_ty(TyInfer(it))
     }
 
+
     pub fn mk_param(self,
                     index: u32,
-                    name: Name) -> Ty<'tcx> {
-        self.mk_ty(TyParam(ParamTy { idx: index, name: name }))
+                    name: Name,
+                    span: Span) -> Ty<'tcx> {
+        self.mk_ty(TyParam(ParamTy { idx: index, name: name, span:span }))
     }
 
     pub fn mk_self_type(self) -> Ty<'tcx> {
-        self.mk_param(0, keywords::SelfType.name())
+        self.mk_param(0, keywords::SelfType.name(), DUMMY_SP)
     }
 
     pub fn mk_param_from_def(self, def: &ty::TypeParameterDef) -> Ty<'tcx> {
-        self.mk_param(def.index, def.name)
+        self.mk_param(def.index, def.name, DUMMY_SP)
     }
 
     pub fn mk_anon(self, def_id: DefId, substs: &'tcx Substs<'tcx>) -> Ty<'tcx> {
