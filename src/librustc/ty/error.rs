@@ -11,7 +11,7 @@
 use hir::def_id::DefId;
 use infer::type_variable;
 use middle::const_val::ConstVal;
-use ty::{self, BoundRegion, DefIdTree, Region, Ty, TyCtxt};
+use ty::{self, BoundRegion, DefIdTree, Region, Ty, TyCtxt, TypeVariants};
 
 use std::fmt;
 use syntax::abi;
@@ -256,13 +256,11 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         use self::TypeError::*;
 
         match err.clone() {
-            Sorts(values)
-            => {
+            Sorts(values) => {
                 debug!("values = {:?}", values);
-                match values
-                 {
-                    (ty.sty:TypeVariants::Param(param), _) |
-                    (_, ty.sty:TypeVariants::Param(param)) => {
+                match values {
+                    (Ty{ sty: TypeVariants::Param(_), .. }, _) |
+                    (_, Ty { sty: TypeVariants::Param(_), .. })  => {
                     let expected_str = values.expected.sort_string(self);
                     let found_str = values.found.sort_string(self);
                     if expected_str == found_str && expected_str == "closure" {
