@@ -11,7 +11,7 @@
 use hir::def_id::DefId;
 use infer::type_variable;
 use middle::const_val::ConstVal;
-use ty::{self, BoundRegion, DefIdTree, Region, Ty, TyCtxt, TypeVariants};
+use ty::{self, BoundRegion, DefIdTree, Region, Ty, TyCtxt};
 
 use std::fmt;
 use syntax::abi;
@@ -259,14 +259,14 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
             Sorts(values) => {
                 debug!("values = {:?}", values);
                 match values {
-                    (Ty{ sty: TypeVariants::Param(_), .. }, _) |
-                    (_, Ty { sty: TypeVariants::Param(_), .. })  => {
-                    let expected_str = values.expected.sort_string(self);
-                    let found_str = values.found.sort_string(self);
-                    if expected_str == found_str && expected_str == "closure" {
-                        db.note("no two closures, even if identical, have the same type");
-                        db.help("consider boxing your closure and/or using it as a trait object");
-                    } 
+                    ExpectedFound{expected: &ty::TyS { sty: ty::TypeVariants::TyParam(_), ..},found:_} |
+                    ExpectedFound{expected:_, found: &ty::TyS { sty: ty::TypeVariants::TyParam(_),..}} => {
+                        let expected_str = values.expected.sort_string(self);
+                        let found_str = values.found.sort_string(self);
+                        if expected_str == found_str && expected_str == "closure" {
+                            db.note("no two closures, even if identical, have the same type");
+                            db.help("consider boxing your closure and/or using it as a trait object");
+                        } 
                     },
                     _=> {}}
             },
