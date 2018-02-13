@@ -239,7 +239,7 @@ impl<'a, 'gcx, 'lcx, 'tcx> ty::TyS<'tcx> {
                 if p.is_self() {
                     "Self".to_string()
                 } else {
-                    "type parameter".to_string()
+                    format!("type parameter {}", p.to_string())
                 }
             }
             ty::TyAnon(..) => "anonymized type".to_string(),
@@ -256,12 +256,30 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         use self::TypeError::*;
 
         match err.clone() {
-            Sorts(values) => {
+            Sorts(values)
+            => {
+                debug!("values = {:?}", values);
                 let expected_str = values.expected.sort_string(self);
                 let found_str = values.found.sort_string(self);
+                debug!("values.found = {:?}", values.found);
+                debug!("Expected= {:?} Found_str={:?}", expected_str, found_str);
                 if expected_str == found_str && expected_str == "closure" {
                     db.note("no two closures, even if identical, have the same type");
                     db.help("consider boxing your closure and/or using it as a trait object");
+                }
+                match values
+                 {
+                    ExpectedFound{expected: &ty::TyS { sty: ty::TypeVariants::TyParam(_), ..},found:_} |
+                    ExpectedFound{expected:_, found: &ty::TyS { sty: ty::TypeVariants::TyParam(_),..}} =>{
+                    let found = values.found;
+                    let expected = values.expected;
+                    match self.hir.span_if_local(found.idx){
+                        Some(span) => {
+                                        db.span_note(span, "this type parameter");
+                                      }
+                        None => {}
+                    } },
+                    _=> {}
                 }
             },
             TyParamDefaultMismatch(values) => {
